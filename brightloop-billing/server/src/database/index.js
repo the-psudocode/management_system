@@ -1,3 +1,2 @@
-export { db, getDatabase, checkDatabaseHealth, closeDatabase } from './connection.js';
-export { default } from './connection.js';
-
+export { prisma, checkDatabaseHealth, disconnectDatabase, Prisma } from './prisma.js';
+export { default } from './prisma.js';

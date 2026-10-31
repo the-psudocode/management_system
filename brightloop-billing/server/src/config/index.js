@@ -8,25 +8,23 @@ const __dirname = path.dirname(__filename);
 // Load .env relative to server root
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const resolveDbPath = (configuredPath) => {
-  if (!configuredPath) {
-    return path.resolve(__dirname, '../database/billing.sqlite');
+const parseCorsOrigins = (rawOrigins) => {
+  if (!rawOrigins) {
+    return ['http://localhost:3000', 'http://localhost:5173'];
   }
-  if (path.isAbsolute(configuredPath)) {
-    return configuredPath;
-  }
-  return path.resolve(__dirname, '../../', configuredPath);
+  return rawOrigins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 };
 
 export const config = {
   env: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
   port: parseInt(process.env.PORT || '5000', 10),
-  databasePath: resolveDbPath(process.env.DATABASE_PATH),
-  corsOrigins: process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
-    : ['http://localhost:5173', 'http://localhost:3000']
+  databaseUrl: process.env.DATABASE_URL || '',
+  databaseUrlUnpooled: process.env.DATABASE_URL_UNPOOLED || '',
+  corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS || process.env.CORS_ORIGIN)
 };
 
 export default config;
-

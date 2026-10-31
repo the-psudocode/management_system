@@ -1,0 +1,12 @@
+// Prisma ORM 7 Schema
+// Note: In Prisma 7, connection URLs are configured in prisma.config.ts (CLI)
+// and via the runtime adapter in code, intentionally omitting the url property here.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
