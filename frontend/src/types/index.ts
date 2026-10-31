@@ -88,6 +88,8 @@ export interface SubscriptionPlan {
 	description?: string;
 	productId: string;
 	productName?: string;
+	productDescription?: string;
+	minimumQuantity?: number;
 	variantId?: string;
 	variantName?: string;
 	priceInPaise: number;

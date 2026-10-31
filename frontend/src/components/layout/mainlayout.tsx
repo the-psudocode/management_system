@@ -1,8 +1,9 @@
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Sidebar from "./sidebar";
 import Navbar from "./navbar";
-import { getCurrentUserProfile } from "../../services/api";
+import { apiService, getCurrentUserProfile } from "../../services/api";
+import { logoutUser } from "../../services/firebase";
 import type { AuthProfile } from "../../types";
 
 function MainLayout() {
@@ -10,6 +11,13 @@ function MainLayout() {
 	const [profile, setProfile] = useState<AuthProfile | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [menuOpen, setMenuOpen] = useState(false);
+	const navigate = useNavigate();
+
+	const handleLogout = async () => {
+		apiService.logout();
+		await logoutUser().catch(() => undefined);
+		navigate("/login", { replace: true });
+	};
 
 	useEffect(() => {
 		let active = true;
@@ -21,8 +29,9 @@ function MainLayout() {
 
 	if (loading) return <div className="flex min-h-screen items-center justify-center bg-[#f6f7f2] text-sm font-medium text-stone-500">Checking your session…</div>;
 	if (!profile) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-	if (profile.role === "customer" && location.pathname !== "/portal") return <Navigate to="/portal" replace />;
-	if (profile.role !== "customer" && location.pathname === "/portal") return <Navigate to="/dashboard" replace />;
+	const isPortalPath = location.pathname === "/portal" || location.pathname.startsWith("/portal/");
+	if (profile.role === "customer" && !isPortalPath) return <Navigate to="/portal" replace />;
+	if (profile.role !== "customer" && isPortalPath) return <Navigate to="/dashboard" replace />;
 
   return (
     <div className="app-shell flex min-h-screen bg-[#f6f7f2] text-stone-900">
@@ -30,7 +39,7 @@ function MainLayout() {
 
       {/* Main content */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <Navbar profile={profile} onMenuClick={() => setMenuOpen(true)} />
+        <Navbar profile={profile} onMenuClick={() => setMenuOpen(true)} onLogout={() => void handleLogout()} />
 
         <main className="app-content min-w-0 flex-1 overflow-y-auto p-4 md:p-7 xl:px-9">
           <Outlet />

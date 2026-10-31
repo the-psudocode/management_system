@@ -14,7 +14,10 @@ const navigation = [
 ];
 
 function Sidebar({ role, open = false, onClose }: { role: UserRole; open?: boolean; onClose?: () => void }) {
-	const items = role === "customer" ? [{ name: "My Dashboard", path: "/portal", icon: UserRound }] : navigation;
+	const items = role === "customer" ? [
+		{ name: "My Dashboard", path: "/portal", icon: UserRound },
+		{ name: "Browse plans", path: "/portal/catalog", icon: Layers },
+	] : navigation;
 	return <>
 		{open && <button aria-label="Close navigation" onClick={onClose} className="fixed inset-0 z-40 bg-stone-950/30 md:hidden" />}
 		<aside className={`app-sidebar fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r border-stone-200/80 bg-[#fffefa] px-4 py-5 transition-transform md:sticky md:top-0 md:z-auto md:h-screen md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>

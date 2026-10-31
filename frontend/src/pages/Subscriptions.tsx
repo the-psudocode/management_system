@@ -116,28 +116,10 @@ export const Subscriptions: React.FC = () => {
 
 			if (!selectedCustomer || !selectedPlan) return;
 
-			// Calculate Next Billing Date based on interval
-			const start = new Date(formData.startDate);
-			const nextBilling = new Date(start);
-			if (selectedPlan.billingInterval === "monthly") {
-				nextBilling.setMonth(nextBilling.getMonth() + 1);
-			} else if (selectedPlan.billingInterval === "quarterly") {
-				nextBilling.setMonth(nextBilling.getMonth() + 3);
-			} else if (selectedPlan.billingInterval === "yearly") {
-				nextBilling.setFullYear(nextBilling.getFullYear() + 1);
-			}
-
 			await createSubscription({
 				customerId: selectedCustomer.id,
-				customerName: selectedCustomer.company || selectedCustomer.name,
 				planId: selectedPlan.id,
-				planName: selectedPlan.name,
-				status: formData.status,
 				startDate: formData.startDate,
-				endDate: null,
-				nextBillingDate: nextBilling.toISOString().split("T")[0],
-				billingInterval: selectedPlan.billingInterval,
-				amountInPaise: selectedPlan.priceInPaise,
 			});
 
 			setIsAddModalOpen(false);

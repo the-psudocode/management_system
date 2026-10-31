@@ -11,7 +11,8 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "seed:demo": "node seed-demo.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
