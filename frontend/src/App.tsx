@@ -30,6 +30,7 @@ export function App() {
 					<Route path="invoices" element={<Invoices />} />
 					<Route path="payments" element={<Payments />} />
 					<Route path="portal" element={<Portal />} />
+					<Route path="portal/catalog" element={<Portal catalogOnly />} />
 				</Route>
 				<Route path="*" element={<Navigate to="/dashboard" replace />} />
 			</Routes>

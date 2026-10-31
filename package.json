@@ -11,6 +11,7 @@
     "dev:frontend": "npm run dev --prefix frontend",
     "build:frontend": "npm run build --prefix frontend",
     "dev:backend": "npm run dev --prefix brightloop-billing/server",
-    "start:backend": "npm start --prefix brightloop-billing/server"
+    "start:backend": "npm start --prefix brightloop-billing/server",
+    "seed:demo": "npm run seed:demo --prefix brightloop-billing/server"
   }
 }

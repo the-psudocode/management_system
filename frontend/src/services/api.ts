@@ -304,9 +304,11 @@ export async function getPlans(page = 1, pageSize = 50): Promise<SubscriptionPla
 		description: pl.description || "",
 		productId: pl.productId,
 		productName: pl.product?.name || "Product",
+		productDescription: pl.product?.description || "",
 		priceInPaise: Number(pl.amountPaise || 0),
 		amountPaise: Number(pl.amountPaise || 0),
 		billingInterval: pl.billingInterval || "monthly",
+		minimumQuantity: Number(pl.minimumQuantity || 1),
 		trialDays: 0,
 		isActive: pl.status === "active",
 		status: pl.status,
@@ -374,15 +376,15 @@ export async function getSubscriptions(
 	};
 }
 
-export async function createSubscription(data: any): Promise<Subscription> {
+export async function createSubscription(data: { customerId?: string; planId: string; quantity?: number; startDate?: string }): Promise<Subscription> {
 	const payload = {
-		customerId: data.customerId,
+		...(data.customerId ? { customerId: data.customerId } : {}),
 		paymentTerms: "Net 30",
 		startDate: data.startDate || new Date().toISOString().split("T")[0],
 		items: [
 			{
 				planId: data.planId,
-				quantity: 1,
+				quantity: data.quantity || 1,
 			},
 		],
 	};

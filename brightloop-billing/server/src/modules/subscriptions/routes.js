@@ -12,7 +12,7 @@ const router = Router();
 const id = z.string().min(1);
 const date = z.coerce.date();
 const createInput = z.object({
-  customerId: id,
+  customerId: id.optional(),
   paymentTerms: z.string().trim().max(1000).optional(),
   startDate: date.optional(),
   endDate: date.optional(),
@@ -44,11 +44,16 @@ router.get('/subscriptions', requireRole('admin', 'staff', 'customer'), asyncHan
   return sendSuccess(res, pageResult(data, total, page, pageSize));
 }));
 
-router.post('/subscriptions', requireRole('admin', 'staff'), asyncHandler(async (req, res) => {
+router.post('/subscriptions', requireRole('admin', 'staff', 'customer'), asyncHandler(async (req, res) => {
   const input = createInput.parse(req.body);
   if (input.endDate && input.startDate && input.endDate < input.startDate) throw ApiError.badRequest('endDate must be on or after startDate.');
 
-  const customer = await prisma.customer.findUnique({ where: { id: input.customerId }, select: { id: true } });
+  const isCustomer = req.user.role.toLowerCase() === 'customer';
+  if (!isCustomer && !input.customerId) throw ApiError.badRequest('customerId is required.');
+  const customer = await prisma.customer.findUnique({
+    where: isCustomer ? { userId: req.user.id } : { id: input.customerId },
+    select: { id: true },
+  });
   if (!customer) throw ApiError.notFound('Customer not found.');
 
   const requestedPlanIds = [...new Set(input.items.map((item) => item.planId))];
@@ -59,6 +64,17 @@ router.post('/subscriptions', requireRole('admin', 'staff'), asyncHandler(async 
   if (plans.length !== requestedPlanIds.length) throw ApiError.badRequest('One or more plans are missing or inactive.');
 
   const planById = new Map(plans.map((plan) => [plan.id, plan]));
+  if (isCustomer) {
+    const existingRequest = await prisma.subscription.findFirst({
+      where: {
+        customerId: customer.id,
+        status: { in: ['draft', 'quotation', 'confirmed', 'active', 'paused'] },
+        items: { some: { planId: { in: requestedPlanIds } } },
+      },
+      select: { id: true },
+    });
+    if (existingRequest) throw ApiError.conflict('You already have an open subscription request for one of these plans.');
+  }
   const cadenceKey = (plan) => `${plan.billingInterval}:${plan.intervalCount}`;
   if (new Set(plans.map(cadenceKey)).size !== 1) {
     throw ApiError.badRequest('All items in one subscription must share a billing interval and interval count.');
@@ -80,7 +96,7 @@ router.post('/subscriptions', requireRole('admin', 'staff'), asyncHandler(async 
   const subscription = await prisma.subscription.create({
     data: {
       number: `SUB-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`,
-      customerId: input.customerId,
+      customerId: customer.id,
       paymentTerms: input.paymentTerms,
       startDate: input.startDate,
       endDate: input.endDate,

@@ -74,7 +74,19 @@ cd brightloop-billing/server
 npm test
 ```
 
-### 3. Environment & Configuration
+### 3. Demo Catalog
+
+After configuring the backend environment variables and generating the Prisma client, add sample products, services, and subscription plans:
+
+```bash
+npm run seed:demo
+```
+
+The seed adds the Brightloop Billing Suite, Cloud Storage Vault, and Priority Customer Support with sample INR monthly or annual plans. It is additive and idempotent: existing entries are skipped, never updated or deleted. It does not create fake subscriptions, invoices, or payments.
+
+Customers can sign in, choose **Browse plans**, and request a plan. The request creates a draft subscription linked to the signed-in customer's own profile. Admin or staff must review and advance it through the existing lifecycle before invoices are generated.
+
+### 4. Environment & Configuration
 
 Copy `.env.example` to `.env` inside `brightloop-billing/server/` only if a server `.env` does not already exist.
 
@@ -84,7 +96,7 @@ Configure:
 - `FIREBASE_PROJECT_ID`: Firebase project identifier for token verification.
 - `BUSINESS_STATE_CODE`: Business origin state code (e.g. `KA`) to calculate Indian GST (CGST/SGST vs IGST).
 
-### 4. API Endpoints
+### 5. API Endpoints
 
 - Health check: `GET /` and `GET /api/health`
 - Versioned API (`/api/v1`):
