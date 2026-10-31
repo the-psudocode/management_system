@@ -14,6 +14,7 @@ export const config = {
   isProduction: process.env.NODE_ENV === 'production',
   port: parseInt(process.env.PORT || '5000', 10),
   databaseUrl: process.env.DATABASE_URL,
+  databaseUrlUnpooled: process.env.DATABASE_URL_UNPOOLED,
   db: {
     connectionString: process.env.DATABASE_URL,
     max: parseInt(process.env.DB_POOL_MAX || '20', 10),
@@ -21,8 +22,8 @@ export const config = {
     connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONN_TIMEOUT || '5000', 10),
     ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined
   },
-  corsOrigins: process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',').map((origin) => origin.trim())
+  corsOrigins: (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN)
+    ? (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN).split(',').map((origin) => origin.trim()).filter(Boolean)
     : ['http://localhost:5173', 'http://localhost:3000'],
   firebase: {
     serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH,

@@ -423,6 +423,7 @@ describe('Brightloop Billing - Authentication & Authorization Live Integration S
         body: JSON.stringify({ email: 'unknown@example.com' })
       });
 
+      const data = await res.json();
       assert.equal(res.status, 404);
       assert.equal(data.success, false);
     });
