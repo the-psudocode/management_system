@@ -625,3 +625,5 @@ export const Subscriptions: React.FC = () => {
 		</div>
 	);
 };
+
+export const SubscriptionsPage = Subscriptions;

@@ -1,7 +1,77 @@
-// ============================================================
-// src/types/index.ts
-// All TypeScript interfaces for Brightloop Billing
-// ============================================================
+// frontend/src/types/index.ts
+
+export type CustomerStatus = "active" | "inactive" | "archived" | string;
+
+export interface Customer {
+	id: string;
+	name: string;
+	email: string;
+	phone: string;
+	company?: string;
+	companyName?: string;
+	status?: any;
+	isActive?: boolean;
+	taxId?: string;
+	gstin?: string;
+	address?: string;
+	city?: string;
+	state?: string;
+	pincode?: string;
+	billingAddress?: {
+		street: string;
+		city: string;
+		state: string;
+		postalCode: string;
+		country: string;
+	};
+	createdAt: string;
+	updatedAt: string;
+}
+
+export type ProductStatus = "active" | "inactive" | "archived" | string;
+export type ProductCategory =
+	| "software"
+	| "addon"
+	| "service"
+	| "usage"
+	| string;
+
+export interface ProductVariant {
+	id: string;
+	name: string;
+	sku: string;
+	pricePaise?: number;
+	priceInPaise?: number;
+	billingCycle?: "monthly" | "yearly" | "one_time" | string;
+	isActive?: boolean;
+}
+
+export interface Product {
+	id: string;
+	name: string;
+	code?: string;
+	description: string;
+	category: ProductCategory;
+	status?: any;
+	isActive?: boolean;
+	basePriceInPaise?: number;
+	variants: ProductVariant[];
+	createdAt: string;
+	updatedAt: string;
+}
+
+export interface SubscriptionPlan {
+	id: string;
+	name: string;
+	code: string;
+	description: string;
+	priceMonthlyPaise: number;
+	priceYearlyPaise: number;
+	priceInPaise?: number;
+	billingInterval?: "monthly" | "quarterly" | "yearly" | string;
+	features: string[];
+	isPopular?: boolean;
+}
 
 export type SubscriptionStatus =
 	| "draft"
@@ -11,107 +81,44 @@ export type SubscriptionStatus =
 	| "paused"
 	| "closed";
 
-export type InvoiceStatus = "draft" | "confirmed" | "paid" | "overdue";
-
-export type UserRole = "admin" | "staff" | "customer";
-
-export type BillingInterval = "monthly" | "quarterly" | "yearly";
-
-export type DiscountType = "fixed" | "percentage";
-
-export interface Customer {
-	id: string;
-	name: string;
-	email: string;
-	phone: string;
-	company: string;
-	address: string;
-	city: string;
-	state: string;
-	pincode: string;
-	gstin: string;
-	createdAt: string;
-	status: "active" | "inactive";
-}
-
-export interface ProductVariant {
-	id: string;
-	name: string;
-	sku: string;
-	priceInPaise: number;
-	isActive: boolean;
-}
-
-export interface Product {
-	id: string;
-	name: string;
-	description: string;
-	category: string;
-	basePriceInPaise: number;
-	variants: ProductVariant[];
-	isActive: boolean;
-	createdAt: string;
-}
-
-export interface SubscriptionPlan {
-	id: string;
-	name: string;
-	description: string;
-	productId: string;
-	productName: string;
-	variantId?: string;
-	variantName?: string;
-	priceInPaise: number;
-	billingInterval: BillingInterval;
-	trialDays: number;
-	isActive: boolean;
-}
-
 export interface Subscription {
 	id: string;
+	subscriptionNumber?: string;
+	subscriptionCode?: string;
 	customerId: string;
-	customerName: string;
+	customerName?: string;
 	planId: string;
-	planName: string;
+	planName?: string;
 	status: SubscriptionStatus;
+	billingCycle?: "monthly" | "yearly" | string;
+	billingInterval?: "monthly" | "quarterly" | "yearly" | string;
 	startDate: string;
-	endDate: string | null;
-	nextBillingDate: string | null;
-	billingInterval: BillingInterval;
-	amountInPaise: number;
+	nextBillingDate?: string;
+	endDate?: string;
+	amountPaise?: number;
+	amountInPaise?: number;
+	currency: string;
 	createdAt: string;
+	updatedAt: string;
 }
 
-export interface TaxRule {
-	id: string;
-	name: string;
-	rate: number;
-	type: "CGST" | "SGST" | "IGST" | "GST";
-	appliesTo: string;
-}
+export type InvoiceStatus =
+	| "draft"
+	| "sent"
+	| "paid"
+	| "partially_paid"
+	| "overdue"
+	| "void";
 
-export interface Discount {
-	id: string;
-	code: string;
-	description: string;
-	type: DiscountType;
-	value: number;
-	startDate: string;
-	endDate: string;
-	maxUses: number;
-	currentUses: number;
-	applicableProductIds: string[];
-	isActive: boolean;
-}
-
-export interface InvoiceLineItem {
+export interface InvoiceItem {
 	id: string;
 	description: string;
 	quantity: number;
-	unitPriceInPaise: number;
-	taxInPaise: number;
-	discountInPaise: number;
-	totalInPaise: number;
+	unitPricePaise?: number;
+	priceInPaise?: number;
+	taxRatePercent?: number;
+	totalPaise?: number;
+	totalInPaise?: number;
 }
 
 export interface Invoice {
@@ -119,69 +126,71 @@ export interface Invoice {
 	invoiceNumber: string;
 	customerId: string;
 	customerName: string;
-	subscriptionId: string;
+	customerEmail?: string;
 	status: InvoiceStatus;
-	lineItems: InvoiceLineItem[];
-	subtotalInPaise: number;
-	taxInPaise: number;
-	discountInPaise: number;
-	totalInPaise: number;
-	amountPaidInPaise: number;
-	outstandingInPaise: number;
-	billingPeriodStart: string;
-	billingPeriodEnd: string;
+	issueDate: string;
 	dueDate: string;
+	items: InvoiceItem[];
+	subtotalPaise: number;
+	taxPaise: number;
+	discountPaise?: number;
+	totalPaise: number;
+	totalInPaise?: number;
+	paidAmountPaise: number;
+	balanceDuePaise: number;
+	currency: string;
 	createdAt: string;
+	updatedAt: string;
 }
+
+export type PaymentMethod =
+	| "upi"
+	| "credit_card"
+	| "bank_transfer"
+	| "net_banking"
+	| "cash";
+export type PaymentStatus = "completed" | "pending" | "failed" | "refunded";
 
 export interface Payment {
 	id: string;
 	invoiceId: string;
-	amountInPaise: number;
-	method: "upi" | "bank_transfer" | "card" | "cash" | "cheque";
-	reference: string;
-	date: string;
-	notes: string;
+	invoiceNumber?: string;
+	customerId: string;
+	customerName?: string;
+	amountPaise?: number;
+	amountInPaise?: number;
+	paymentMethod: PaymentMethod;
+	referenceNumber: string;
+	status: PaymentStatus;
+	paymentDate: string;
+	notes?: string;
+	createdAt: string;
 }
 
 export interface DashboardSummary {
+	mrrPaise: number;
+	mrrInPaise?: number;
+	arrPaise: number;
+	arrInPaise?: number;
 	activeSubscriptions: number;
-	mrrInPaise: number;
-	arrInPaise: number;
-	totalRevenueInPaise: number;
-	outstandingInPaise: number;
-	overdueInvoices: number;
 	totalCustomers: number;
-	newCustomersThisMonth: number;
-}
-
-export interface RevenueDataPoint {
-	month: string;
-	revenue: number;
-	subscriptions: number;
-}
-
-export interface AgingBucket {
-	range: string;
-	count: number;
-	amountInPaise: number;
+	newCustomersThisMonth?: number;
+	overdueInvoicesCount: number;
+	overdueInvoices?: number;
+	overdueAmountPaise: number;
+	outstandingInPaise?: number;
 }
 
 export interface DashboardAnalytics {
-	revenueTrend: RevenueDataPoint[];
-	subscriptionStats: {
+	revenueHistory: { month: string; mrrPaise: number; arrPaise: number }[];
+	revenueTrend?: { month: string; mrr: number; arr: number }[];
+	subscriptionsByStatus: { status: string; count: number }[];
+	subscriptionStats?: {
 		active: number;
-		draft: number;
 		paused: number;
+		draft: number;
 		closed: number;
 	};
-	overdueAging: AgingBucket[];
-}
-
-export interface PaginatedResponse<T> {
-	data: T[];
-	total: number;
-	page: number;
-	pageSize: number;
-	totalPages: number;
+	agingOverdue: { range: string; amountPaise: number; count: number }[];
+	overdueAging?: { range: string; amount: number; count: number }[];
 }
