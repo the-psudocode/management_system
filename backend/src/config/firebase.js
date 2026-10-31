@@ -1,7 +1,11 @@
 import admin from 'firebase-admin';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import config from './index.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 let authInstance = null;
 
@@ -131,24 +135,45 @@ class MockFirebaseAuth {
 /**
  * Initializes and returns the Firebase Admin Auth instance.
  * Automatically selects between real Firebase Admin SDK and Mock Auth provider
- * based on whether valid credentials have been provided in the environment.
+ * based on environment variables and credentials.
+ *
+ * Rules:
+ * - If MOCK_AUTH=false: Mock auth is strictly disabled; real Firebase initialization is required.
+ * - If MOCK_AUTH=true: Mock auth is explicitly used for local offline development.
+ * - If credentials are provided: Real Firebase Admin SDK is initialized using service account JSON or environment variables.
+ * - Never print or expose the private key or full service account credentials.
  */
 export const getFirebaseAuth = () => {
   if (authInstance) {
     return authInstance;
   }
 
-  // Force mock mode if explicitly requested or running unit tests without credentials
-  const shouldUseMock =
-    process.env.MOCK_AUTH === 'true' ||
-    process.env.NODE_ENV === 'test' ||
-    (!process.env.FIREBASE_SERVICE_ACCOUNT_PATH &&
-      !process.env.FIREBASE_PROJECT_ID &&
-      !process.env.GOOGLE_APPLICATION_CREDENTIALS &&
-      !process.env.FIREBASE_AUTH_EMULATOR_HOST);
+  const explicitMock = process.env.MOCK_AUTH === 'true';
+  const explicitDisableMock = process.env.MOCK_AUTH === 'false';
+
+  const rawServiceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  const hasServiceAccountPath = Boolean(rawServiceAccountPath && rawServiceAccountPath.trim());
+  const hasEnvCredentials = Boolean(
+    process.env.FIREBASE_PROJECT_ID &&
+    process.env.FIREBASE_PRIVATE_KEY &&
+    process.env.FIREBASE_CLIENT_EMAIL
+  );
+  const hasCredentials = hasServiceAccountPath || hasEnvCredentials;
+
+  // Determine whether mock auth should be used
+  let shouldUseMock = false;
+  if (explicitMock) {
+    shouldUseMock = true;
+  } else if (explicitDisableMock) {
+    shouldUseMock = false;
+  } else if (!hasCredentials && !process.env.FIREBASE_PROJECT_ID && !process.env.FIREBASE_AUTH_EMULATOR_HOST) {
+    shouldUseMock = true;
+  } else if (process.env.NODE_ENV === 'test' && !hasCredentials) {
+    shouldUseMock = true;
+  }
 
   if (shouldUseMock) {
-    console.log('[Firebase Auth] Initializing in mock mode (no external credentials configured or test mode enabled).');
+    console.log('[Firebase Auth] Initializing in mock mode (MOCK_AUTH=true or offline development without credentials).');
     authInstance = new MockFirebaseAuth();
     return authInstance;
   }
@@ -157,23 +182,36 @@ export const getFirebaseAuth = () => {
     if (admin.apps.length === 0) {
       let credential = null;
 
-      // Check service account JSON path
-      const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || process.env.GOOGLE_APPLICATION_CREDENTIALS;
-      if (serviceAccountPath) {
-        const resolvedPath = path.isAbsolute(serviceAccountPath)
-          ? serviceAccountPath
-          : path.resolve(process.cwd(), serviceAccountPath);
+      // 1. Resolve and load service account JSON file (stored outside or inside repo)
+      if (hasServiceAccountPath) {
+        const cleanedPath = rawServiceAccountPath.trim().replace(/^["']|["']$/g, '');
+        let resolvedPath = path.isAbsolute(cleanedPath)
+          ? path.normalize(cleanedPath)
+          : path.resolve(process.cwd(), cleanedPath);
+
+        // If relative path is not found from process.cwd(), also check relative to backend directory
+        if (!fs.existsSync(resolvedPath)) {
+          const backendRelative = path.resolve(__dirname, '../../', cleanedPath);
+          if (fs.existsSync(backendRelative)) {
+            resolvedPath = backendRelative;
+          }
+        }
 
         if (fs.existsSync(resolvedPath)) {
-          const serviceAccount = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+          const serviceAccountRaw = fs.readFileSync(resolvedPath, 'utf8');
+          const serviceAccount = JSON.parse(serviceAccountRaw);
           credential = admin.credential.cert(serviceAccount);
         } else {
-          console.warn(`[Firebase Auth] Service account file not found at ${resolvedPath}. Falling back to default credentials.`);
+          const notFoundMsg = `[Firebase Auth] Service account file not found at: ${resolvedPath}`;
+          if (explicitDisableMock || process.env.NODE_ENV === 'production') {
+            throw new Error(notFoundMsg);
+          }
+          console.warn(`${notFoundMsg}. Falling back to default credentials.`);
         }
       }
 
-      // Check direct environment variables
-      if (!credential && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
+      // 2. Direct environment variables (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)
+      if (!credential && hasEnvCredentials) {
         credential = admin.credential.cert({
           projectId: process.env.FIREBASE_PROJECT_ID,
           clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
@@ -182,14 +220,16 @@ export const getFirebaseAuth = () => {
       }
 
       if (credential) {
-        admin.initializeApp({ credential });
-        console.log('[Firebase Auth] Successfully initialized with service account credentials.');
+        admin.initializeApp({
+          credential,
+          projectId: process.env.FIREBASE_PROJECT_ID || undefined
+        });
+        console.log('[Firebase Auth] Successfully initialized Firebase Admin SDK with service account credentials.');
       } else {
         // Application Default Credentials or Emulator
-        admin.initializeApp({
-          projectId: process.env.FIREBASE_PROJECT_ID || 'brightloop-billing'
-        });
-        console.log('[Firebase Auth] Initialized using application default credentials / emulator.');
+        const projectId = process.env.FIREBASE_PROJECT_ID || 'brightloop-billing';
+        admin.initializeApp({ projectId });
+        console.log(`[Firebase Auth] Initialized using application default credentials / emulator for project: ${projectId}`);
       }
     }
 
@@ -197,16 +237,36 @@ export const getFirebaseAuth = () => {
     return authInstance;
   } catch (error) {
     console.error('[Firebase Auth] Failed to initialize Firebase Admin SDK:', error.message);
-    console.warn('[Firebase Auth] Falling back to Mock Auth Provider for local operations.');
+    if (explicitDisableMock || process.env.NODE_ENV === 'production') {
+      throw error;
+    }
+    console.warn('[Firebase Auth] Falling back to Mock Auth Provider for offline local operations.');
     authInstance = new MockFirebaseAuth();
     return authInstance;
   }
+};
+
+export const setFirebaseAuth = (customInstance) => {
+  authInstance = customInstance;
 };
 
 export const resetFirebaseAuth = () => {
   authInstance = null;
 };
 
-export const auth = getFirebaseAuth();
+export { MockFirebaseAuth };
+
+// Proxy object delegating to the active Firebase Auth instance so consumers always interact with the configured provider
+export const auth = new Proxy({}, {
+  get(target, prop) {
+    const instance = authInstance || getFirebaseAuth();
+    if (prop === 'constructor') {
+      return instance.constructor;
+    }
+    const val = instance[prop];
+    return typeof val === 'function' ? val.bind(instance) : val;
+  }
+});
+
 export default auth;
 

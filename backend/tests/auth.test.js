@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createApp } from '../src/app.js';
 import { checkDatabaseHealth, query, closeDatabase } from '../src/database/index.js';
 import { authService } from '../src/modules/auth/auth.service.js';
-import auth from '../src/config/firebase.js';
+import auth, { setFirebaseAuth, resetFirebaseAuth, MockFirebaseAuth } from '../src/config/firebase.js';
 
 describe('Brightloop Billing - Authentication & Authorization Live Integration Suite', () => {
   let app;
@@ -22,6 +22,10 @@ describe('Brightloop Billing - Authentication & Authorization Live Integration S
   let customer2User;
 
   before(async () => {
+    // For automated integration tests simulating Bearer tokens, attach mock auth provider
+    const mockAuth = new MockFirebaseAuth();
+    setFirebaseAuth(mockAuth);
+
     app = createApp();
 
     const health = await checkDatabaseHealth();
@@ -55,6 +59,7 @@ describe('Brightloop Billing - Authentication & Authorization Live Integration S
   });
 
   after(async () => {
+    resetFirebaseAuth();
     if (server) server.close();
     await closeDatabase();
   });
