@@ -1,30 +1,57 @@
 # Brightloop Billing — Management System
 
-Subscription management and billing engine backend built with Node.js, Express, PostgreSQL, and Firebase Authentication.
+A subscription management system featuring a modern React frontend and a robust Node.js/PostgreSQL backend engine.
+
+---
 
 ## Project Structure
-- `backend/`: Core backend API engine (Express.js, PostgreSQL `pg.Pool`, Firebase Admin SDK, Zod).
-- `frontend/`: Client web application (kept separate from backend).
+
+- **Frontend** (Root): React 19, TypeScript, Vite, TailwindCSS, React Router, Recharts, Lucide.
+- **Backend** (`backend/`): Node.js, Express.js, PostgreSQL (Neon), Firebase Authentication, Zod.
+
+---
 
 ## Quick Start
+
+### 1. Backend Setup
 ```bash
 # Navigate to backend
 cd backend
 
-# Install dependencies
+# Install backend dependencies
 npm install
 
 # Verify database connection
 npm run db:verify
 
-# Start development server
+# Start backend server (http://localhost:5000)
 npm run dev
 ```
 
-Or run directly from the project root:
+### 2. Frontend Setup
+From the project root:
 ```bash
-npm start      # Starts the backend server
-npm run dev    # Starts backend in watch mode
-npm test       # Runs the test suite
-npm run db:verify # Verifies PostgreSQL connection
+# Install frontend dependencies
+npm install
+
+# Start Vite frontend dev server (http://localhost:5173)
+npm run dev
+
+# Build for production
+npm run build
+```
+
+### 3. Running from Root
+```bash
+# Start frontend
+npm run dev
+
+# Start backend server
+npm run backend:dev
+
+# Run backend test suite
+npm run backend:test
+
+# Verify database connection
+npm run backend:verify
 ```
