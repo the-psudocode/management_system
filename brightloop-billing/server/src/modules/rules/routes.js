@@ -66,7 +66,10 @@ function validateDiscount(input) {
 }
 
 router.get('/discounts', requireRole('admin', 'staff'), asyncHandler(async (req, res) => {
-  const data = await prisma.discount.findMany({ include: { products: { include: { product: true } } }, orderBy: [{ isActive: 'desc' }, { startsAt: 'desc' }] });
+  const data = await prisma.discount.findMany({
+    include: { products: { include: { product: { select: { id: true, name: true, type: true, status: true } } } } },
+    orderBy: [{ isActive: 'desc' }, { startsAt: 'desc' }],
+  });
   return sendSuccess(res, data);
 }));
 

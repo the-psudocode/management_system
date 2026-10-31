@@ -119,6 +119,7 @@ All create/update/action routes validate input with Zod, enforce role/resource a
 - `prisma/schema.prisma` now contains the five existing models plus quotation templates, quotations, subscription lifecycle, taxes, discounts/redemptions, invoices, payments/allocations, and audit logs.
 - `npm run prisma:generate` completed successfully with Prisma Client 7.10.1.
 - Firebase Admin token verification and role guards are wired. Business routes exist for catalog CRUD, subscription lifecycle, quotation conversion, tax/discount administration, billing preview/run, invoice confirmation/cancellation, payments, and analytics.
+- An opt-in daily billing scheduler calls the same idempotent runner. It uses the configured business timezone for the billing date and remains disabled unless `BILLING_WORKER_ENABLED=true`.
 - No migration SQL has been created or applied, and no Neon schema changes have been made. Runtime business routes will need an additive migration after a baseline because the live database has no Prisma migration history.
 - The root frontend dependencies are already installed in this workspace (`npm ls --depth=0` resolves them), so a second root `npm install` was unnecessary and avoided changing the existing lockfile diff.
 - The Firebase project ID and Admin Application Default Credentials must be configured at runtime. `BUSINESS_STATE_CODE` is needed for GST component selection.

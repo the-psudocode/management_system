@@ -21,7 +21,7 @@ const itemInput = z.object({
 });
 
 router.get('/quotation-templates', requireRole('admin', 'staff'), asyncHandler(async (req, res) => {
-  const templates = await prisma.quotationTemplate.findMany({ include: { items: { include: { product: true, plan: true } } }, orderBy: { name: 'asc' } });
+  const templates = await prisma.quotationTemplate.findMany({ include: { items: { include: { product: { select: { id: true, name: true, type: true, status: true } }, plan: true } } }, orderBy: { name: 'asc' } });
   return sendSuccess(res, templates);
 }));
 

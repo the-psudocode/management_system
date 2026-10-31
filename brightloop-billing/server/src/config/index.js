@@ -25,6 +25,10 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL || '',
   databaseUrlUnpooled: process.env.DATABASE_URL_UNPOOLED || '',
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || '',
+  billingWorkerEnabled: process.env.BILLING_WORKER_ENABLED === 'true',
+  billingRunUtcHour: Math.min(23, Math.max(0, parseInt(process.env.BILLING_RUN_UTC_HOUR || '0', 10) || 0)),
+  billingRunUtcMinute: Math.min(59, Math.max(0, parseInt(process.env.BILLING_RUN_UTC_MINUTE || '5', 10) || 0)),
+  businessTimeZone: process.env.BUSINESS_TIMEZONE || 'Asia/Kolkata',
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS || process.env.CORS_ORIGIN)
 };
 

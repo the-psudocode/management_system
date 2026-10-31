@@ -72,22 +72,7 @@ async function invoicePreview(tx, subscription, billingDate, originState) {
   };
 }
 
-router.post('/billing/preview', requireRole('admin'), asyncHandler(async (req, res) => {
-  const { billingDate } = z.object({ billingDate: dateInput }).parse(req.body);
-  const due = await prisma.subscription.findMany({
-    where: { status: 'active', nextBillingDate: { lte: billingDate } },
-    include: dueSubscriptionInclude,
-    orderBy: { nextBillingDate: 'asc' },
-    take: 500,
-  });
-  const originState = process.env.BUSINESS_STATE_CODE || null;
-  const previews = [];
-  for (const subscription of due) previews.push(await invoicePreview(prisma, subscription, billingDate, originState));
-  return sendSuccess(res, { billingDate, count: previews.length, invoices: previews }, 'Billing preview calculated without writing records.');
-}));
-
-router.post('/billing/run', requireRole('admin'), asyncHandler(async (req, res) => {
-  const { billingDate } = z.object({ billingDate: dateInput }).parse(req.body);
+export async function runBillingDate(billingDate, actorUserId = null) {
   const originState = process.env.BUSINESS_STATE_CODE || null;
   const dueIds = await prisma.subscription.findMany({
     where: { status: 'active', nextBillingDate: { lte: billingDate } },
@@ -100,7 +85,7 @@ router.post('/billing/run', requireRole('admin'), asyncHandler(async (req, res) 
 
   for (const { id } of dueIds) {
     try {
-      const invoice = await prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx) => {
         const subscription = await tx.subscription.findUnique({ where: { id }, include: dueSubscriptionInclude });
         if (!subscription || subscription.status !== 'active' || !subscription.nextBillingDate || subscription.nextBillingDate > billingDate) return null;
         if (subscription.endDate && subscription.nextBillingDate > subscription.endDate) {
@@ -125,7 +110,6 @@ router.post('/billing/run', requireRole('admin'), asyncHandler(async (req, res) 
         }
         const priorRevisions = await tx.invoice.aggregate({ where: { billingPeriodId: billingPeriod.id }, _max: { revision: true } });
         const revision = (priorRevisions._max.revision || 0) + 1;
-
         const totalBeforeDiscounts = subscription.items.reduce((sum, item) => sum + item.unitPricePaise * BigInt(item.quantity), 0n);
         const totalQuantity = subscription.items.reduce((sum, item) => sum + item.quantity, 0);
         const candidates = subscription.discounts.map(({ discount }) => discount)
@@ -139,8 +123,8 @@ router.post('/billing/run', requireRole('admin'), asyncHandler(async (req, res) 
             endsAt: { gte: billingDate },
             ...(discount.maxUses == null ? {} : { usedCount: { lt: discount.maxUses } }),
           };
-          const result = await tx.discount.updateMany({ where, data: { usedCount: { increment: 1 } } });
-          if (result.count === 1) claimed.push(discount);
+          const claim = await tx.discount.updateMany({ where, data: { usedCount: { increment: 1 } } });
+          if (claim.count === 1) claimed.push(discount);
         }
 
         const taxRules = await tx.taxRule.findMany({ where: { isActive: true } });
@@ -175,20 +159,19 @@ router.post('/billing/run', requireRole('admin'), asyncHandler(async (req, res) 
           },
         });
 
-        const nextDate = period.next;
-        const termEnded = Boolean(subscription.endDate && nextDate > subscription.endDate);
+        const termEnded = Boolean(subscription.endDate && period.next > subscription.endDate);
         await tx.subscription.update({
           where: { id: subscription.id },
           data: {
-            nextBillingDate: termEnded ? null : nextDate,
+            nextBillingDate: termEnded ? null : period.next,
             ...(termEnded && subscription.autoClose ? { status: 'closed', closedAt: new Date(), closeReason: 'Term ended' } : {}),
           },
         });
-        await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'invoice.generated', entityType: 'invoice', entityId: invoice.id, after: { subscriptionId: subscription.id, billingPeriodStart: periodKey } } });
+        await tx.auditLog.create({ data: { actorUserId, action: 'invoice.generated', entityType: 'invoice', entityId: invoice.id, after: { subscriptionId: subscription.id, billingPeriodStart: periodKey } } });
         return { invoice, reason: null };
       });
-      if (invoice?.invoice) created.push(invoice.invoice);
-      else skipped.push({ subscriptionId: id, reason: invoice?.reason || 'No longer due.' });
+      if (result?.invoice) created.push(result.invoice);
+      else skipped.push({ subscriptionId: id, reason: result?.reason || 'No longer due.' });
     } catch (error) {
       if (error?.code === 'P2002') skipped.push({ subscriptionId: id, reason: 'Concurrent billing attempt won the unique billing-period claim.' });
       else throw error;
@@ -199,9 +182,28 @@ router.post('/billing/run', requireRole('admin'), asyncHandler(async (req, res) 
     where: { status: { in: ['confirmed', 'partially_paid'] }, dueDate: { lt: billingDate } },
     data: { status: 'overdue' },
   });
-  return sendSuccess(res, { billingDate, created, createdCount: created.length, skipped, overdueMarked: overdue.count }, 'Billing run completed.');
+  return { billingDate, created, createdCount: created.length, skipped, overdueMarked: overdue.count };
+}
+
+router.post('/billing/preview', requireRole('admin'), asyncHandler(async (req, res) => {
+  const { billingDate } = z.object({ billingDate: dateInput }).parse(req.body);
+  const due = await prisma.subscription.findMany({
+    where: { status: 'active', nextBillingDate: { lte: billingDate } },
+    include: dueSubscriptionInclude,
+    orderBy: { nextBillingDate: 'asc' },
+    take: 500,
+  });
+  const originState = process.env.BUSINESS_STATE_CODE || null;
+  const previews = [];
+  for (const subscription of due) previews.push(await invoicePreview(prisma, subscription, billingDate, originState));
+  return sendSuccess(res, { billingDate, count: previews.length, invoices: previews }, 'Billing preview calculated without writing records.');
 }));
 
+router.post('/billing/run', requireRole('admin'), asyncHandler(async (req, res) => {
+  const { billingDate } = z.object({ billingDate: dateInput }).parse(req.body);
+  const result = await runBillingDate(billingDate, req.user.id);
+  return sendSuccess(res, result, 'Billing run completed.');
+}));
 router.get('/invoices', requireRole('admin', 'staff', 'customer'), asyncHandler(async (req, res) => {
   const { page, pageSize, skip, take } = pagination(req.query);
   const status = req.query.status ? String(req.query.status).toLowerCase() : undefined;

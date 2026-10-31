@@ -80,7 +80,7 @@ router.get('/products', requireRole('admin', 'staff', 'customer'), asyncHandler(
   const search = String(req.query.search || '').trim();
   const where = { status: 'active', ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}) };
   const [data, total] = await prisma.$transaction([
-    prisma.product.findMany({ where, include: { variants: true }, orderBy: { name: 'asc' }, skip, take }),
+    prisma.product.findMany({ where, select: { id: true, name: true, type: true, description: true, salesPricePaise: true, status: true, createdAt: true, variants: true }, orderBy: { name: 'asc' }, skip, take }),
     prisma.product.count({ where }),
   ]);
   return sendSuccess(res, pageResult(data, total, page, pageSize));
@@ -95,7 +95,7 @@ router.post('/products', admin, asyncHandler(async (req, res) => {
 
 router.get('/products/:id', requireRole('admin', 'staff', 'customer'), asyncHandler(async (req, res) => {
   const id = idParam.parse(req.params.id);
-  const product = await prisma.product.findUnique({ where: { id }, include: { variants: true, plans: { where: { status: 'active' } } } });
+  const product = await prisma.product.findUnique({ where: { id }, select: { id: true, name: true, type: true, description: true, salesPricePaise: true, status: true, createdAt: true, variants: true, plans: { where: { status: 'active' } } } });
   if (!product || (product.status !== 'active' && req.user.role.toLowerCase() === 'customer')) throw ApiError.notFound('Product not found.');
   return sendSuccess(res, product);
 }));
@@ -140,7 +140,7 @@ router.get('/plans', requireRole('admin', 'staff', 'customer'), asyncHandler(asy
   const search = String(req.query.search || '').trim();
   const where = { status: 'active', ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}) };
   const [data, total] = await prisma.$transaction([
-    prisma.subscriptionPlan.findMany({ where, include: { product: true }, orderBy: { name: 'asc' }, skip, take }),
+    prisma.subscriptionPlan.findMany({ where, include: { product: { select: { id: true, name: true, type: true, description: true, status: true } } }, orderBy: { name: 'asc' }, skip, take }),
     prisma.subscriptionPlan.count({ where }),
   ]);
   return sendSuccess(res, pageResult(data, total, page, pageSize));
@@ -149,7 +149,7 @@ router.get('/plans', requireRole('admin', 'staff', 'customer'), asyncHandler(asy
 router.post('/plans', admin, asyncHandler(async (req, res) => {
   const input = planInput.parse(req.body);
   if (input.availableFrom && input.availableUntil && input.availableUntil < input.availableFrom) throw ApiError.badRequest('availableUntil must be on or after availableFrom.');
-  const data = await prisma.subscriptionPlan.create({ data: input, include: { product: true } });
+  const data = await prisma.subscriptionPlan.create({ data: input, include: { product: { select: { id: true, name: true, type: true, description: true, status: true } } } });
   return sendSuccess(res, data, 'Subscription plan created.', 201);
 }));
 
@@ -162,7 +162,7 @@ router.patch('/plans/:id', admin, asyncHandler(async (req, res) => {
   const from = input.availableFrom ?? current.availableFrom;
   const until = input.availableUntil ?? current.availableUntil;
   if (from && until && until < from) throw ApiError.badRequest('availableUntil must be on or after availableFrom.');
-  const data = await prisma.subscriptionPlan.update({ where: { id }, data: input, include: { product: true } });
+  const data = await prisma.subscriptionPlan.update({ where: { id }, data: input, include: { product: { select: { id: true, name: true, type: true, description: true, status: true } } } });
   return sendSuccess(res, data, 'Subscription plan updated.');
 }));
 

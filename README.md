@@ -1,75 +1,43 @@
-# React + TypeScript + Vite
+# Brightloop Billing
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Brightloop Billing is a subscription and recurring-invoice management system. The repository contains a React/Vite admin UI and an Express/Prisma API backed by Neon PostgreSQL.
 
-Currently, two official plugins are available:
+## Project layout
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- `src/` — React and TypeScript frontend. Dashboard data is still backed by mock API functions.
+- `brightloop-billing/server/` — Express API, Prisma schema/client, and backend modules.
+- `brightloop-billing/server/docs/backend-architecture.md` — backend model, lifecycle, API, and migration design.
 
-## React Compiler
+## Frontend
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The root frontend dependencies are already installed in the current workspace.
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## Backend
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```sh
+cd brightloop-billing/server
+npm install
+npm run prisma:generate
+npm run dev
 ```
+
+Copy `.env.example` to `.env` only if a server `.env` does not already exist. Configure `DATABASE_URL` with the pooled Neon URL and `DATABASE_URL_UNPOOLED` with the direct URL. The Prisma CLI reads the direct URL through `prisma.config.ts`.
+
+Protected API routes require a Firebase ID token in `Authorization: Bearer <token>`. Set `FIREBASE_PROJECT_ID` and provide Firebase Admin Application Default Credentials in the runtime environment. User roles are loaded from `users.role` in Postgres. Set `BUSINESS_STATE_CODE` to enable India GST component selection.
+
+The API health endpoints are `/` and `/api/health`. Versioned business routes use `/api/v1`, including `/customers`, `/products`, `/plans`, `/quotation-templates`, `/quotations`, `/subscriptions`, `/billing/preview`, `/billing/run`, `/invoices`, `/payments`, `/tax-rules`, `/discounts`, and `/analytics/*`.
+
+## Database status
+
+The Prisma schema and generated client include the existing five tables and the proposed billing models. The live Neon database still has its original five-table schema and has no Prisma migration history. **Do not run `prisma migrate dev`, `prisma migrate deploy`, or `db push` against that database until the baseline and additive migration SQL have been reviewed and tested on a Neon branch.** The API business routes require those migrations before they can use the new models.
+
+## Current implementation limits
+
+- The frontend dashboard still uses mock data and is not yet connected to the API.
+- Billing can be previewed and run with an explicit date through the protected API. An opt-in daily worker is available; set `BILLING_WORKER_ENABLED=true` only after database migrations and billing rules are ready.
+- Quotation/invoice email delivery and printable PDF generation are not configured.
+- Firebase project credentials and `BUSINESS_STATE_CODE` are environment-specific and are not committed.
