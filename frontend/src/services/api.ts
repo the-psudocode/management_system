@@ -94,7 +94,6 @@ export async function getCustomers(
 }
 
 export async function createCustomer(data: any): Promise<Customer> {
-	// Filter out fields that belong to user or are not in the current DB schema
 	const payload: Record<string, any> = {
 		userId: data.userId || "pre-existing-id",
 		company: data.company || data.name,
@@ -520,7 +519,6 @@ export const apiService = {
 	recordPayment,
 	getPaymentsByInvoiceId,
 	createInvoice: async (_data: any): Promise<Invoice> => {
-		// Runs a billing run for today to materialize draft invoices
 		const today = new Date().toISOString().split("T")[0];
 		try {
 			await apiClient.post("/billing/run", { billingDate: today });

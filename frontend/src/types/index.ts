@@ -33,6 +33,7 @@ export interface Customer {
 	email: string;
 	phone: string;
 	company: string;
+	companyName?: string;
 	address: string;
 	city: string;
 	state: string;
@@ -51,6 +52,7 @@ export interface ProductVariant {
 	sku: string;
 	priceInPaise: number;
 	pricePaise?: number | string;
+	billingCycle?: string;
 	isActive: boolean;
 }
 
@@ -72,6 +74,7 @@ export interface Product {
 
 export interface SubscriptionPlan {
 	id: string;
+	code?: string;
 	name: string;
 	description?: string;
 	productId: string;
@@ -102,6 +105,7 @@ export interface Subscription {
 	endDate: string | null;
 	nextBillingDate: string | null;
 	billingInterval: BillingInterval;
+	billingCycle?: string;
 	amountInPaise: number;
 	amountPaise?: number;
 	items?: any[];
@@ -157,6 +161,7 @@ export interface Invoice {
 	subscriptionId: string;
 	subscription?: any;
 	status: InvoiceStatus;
+	currency?: string;
 	lineItems?: InvoiceLineItem[];
 	items?: any[];
 	subtotalInPaise: number;
@@ -187,6 +192,7 @@ export interface Payment {
 	invoiceId?: string;
 	invoiceNumber?: string;
 	customerId?: string;
+	customerName?: string;
 	customer?: any;
 	amountInPaise?: number;
 	amountPaise: number;
@@ -206,10 +212,14 @@ export interface Payment {
 export interface DashboardSummary {
 	activeSubscriptions: number;
 	mrrInPaise: number;
+	mrrPaise?: number;
 	arrInPaise: number;
+	arrPaise?: number;
 	totalRevenueInPaise: number;
 	outstandingInPaise: number;
+	overdueAmountPaise?: number;
 	overdueInvoices: number;
+	overdueInvoicesCount?: number;
 	totalCustomers: number;
 	newCustomersThisMonth: number;
 }
@@ -228,13 +238,16 @@ export interface AgingBucket {
 
 export interface DashboardAnalytics {
 	revenueTrend: RevenueDataPoint[];
+	revenueHistory?: any[];
 	subscriptionStats: {
 		active: number;
 		draft: number;
 		paused: number;
 		closed: number;
 	};
+	subscriptionsByStatus?: any;
 	overdueAging: AgingBucket[];
+	agingOverdue?: any[];
 }
 
 export interface PaginatedResponse<T> {
