@@ -1,75 +1,56 @@
-# React + TypeScript + Vite
+# Management System (Brightloop Billing)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern billing engine and subscription management platform built with React, Vite, Node.js, and Prisma.
 
-Currently, two official plugins are available:
+## Project Structure
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```text
+management_system/
+├── frontend/                 # React 19 + TypeScript + Vite + Tailwind CSS frontend
+│   ├── src/
+│   │   ├── components/       # Layout (Sidebar, Navbar), common widgets
+│   │   ├── pages/            # Dashboard, Customers, Products, Subscriptions, Invoices, Auth
+│   │   ├── services/         # API service layer
+│   │   ├── data/             # Mock data store
+│   │   ├── types/            # TypeScript data contracts & models
+│   │   └── utils/            # Currency & date formatters
+│   ├── package.json
+│   └── vite.config.ts
+├── brightloop-billing/server/ # Express + Prisma + Neon PostgreSQL backend
+│   ├── src/
+│   ├── prisma/
+│   └── package.json
+└── package.json              # Monorepo root runner
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## Getting Started
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 1. Frontend Development
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Run the frontend app from the root:
+```bash
+npm run dev
+# or
+npm run dev:frontend
+```
 
+Or directly inside the `frontend` folder:
+```bash
+cd frontend
+npm run dev
+```
+
+Build for production:
+```bash
+npm run build
+```
+
+### 2. Backend Development
+
+Run the backend server:
+```bash
+npm run dev:backend
+# or
+cd brightloop-billing/server
+npm run dev
 ```
