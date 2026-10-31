@@ -27,10 +27,17 @@ let subscriptionsData: Subscription[] = [...mockSubscriptions];
 let invoicesData: Invoice[] = [...mockInvoices];
 let paymentsData: Payment[] = [...mockPayments];
 
-const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms = 150) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const createPaginatedArray = <T>(items: T[]): any => {
+	const arr = [...items] as any;
+	arr.data = items;
+	arr.totalPages = 1;
+	arr.total = items.length;
+	return arr;
+};
 
 export const apiService = {
-	// --- Dashboard API ---
 	async getDashboardSummary(): Promise<DashboardSummary> {
 		await delay();
 		return { ...mockDashboardSummary };
@@ -41,23 +48,41 @@ export const apiService = {
 		return { ...mockDashboardAnalytics };
 	},
 
-	// --- Customers API ---
-	async getCustomers(search?: string, status?: string): Promise<Customer[]> {
+	async getCustomers(
+		arg1?: any,
+		arg2?: any,
+		arg3?: any,
+		arg4?: any,
+	): Promise<any> {
 		await delay();
 		let result = [...customersData];
+
+		let search =
+			typeof arg1 === "string"
+				? arg1
+				: typeof arg3 === "string"
+					? arg3
+					: "";
+		let status =
+			typeof arg2 === "string"
+				? arg2
+				: typeof arg4 === "string"
+					? arg4
+					: "all";
+
 		if (search) {
 			const q = search.toLowerCase();
 			result = result.filter(
 				(c) =>
 					c.name.toLowerCase().includes(q) ||
 					c.email.toLowerCase().includes(q) ||
-					c.phone.includes(q),
+					c.phone?.includes(q),
 			);
 		}
 		if (status && status !== "all") {
 			result = result.filter((c) => c.status === status);
 		}
-		return result;
+		return createPaginatedArray(result);
 	},
 
 	async getCustomerById(id: string): Promise<Customer | undefined> {
@@ -94,13 +119,24 @@ export const apiService = {
 		return customersData[index];
 	},
 
-	// --- Products API ---
-	async getProducts(category?: string): Promise<Product[]> {
+	async getProducts(
+		arg1?: any,
+		arg2?: any,
+		arg3?: any,
+		arg4?: any,
+	): Promise<any> {
 		await delay();
+		let result = [...productsData];
+		let category =
+			typeof arg1 === "string"
+				? arg1
+				: typeof arg4 === "string"
+					? arg4
+					: "all";
 		if (category && category !== "all") {
-			return productsData.filter((p) => p.category === category);
+			result = result.filter((p) => p.category === category);
 		}
-		return [...productsData];
+		return createPaginatedArray(result);
 	},
 
 	async createProduct(
@@ -132,57 +168,82 @@ export const apiService = {
 		return productsData[index];
 	},
 
-	// --- Subscription Plans API ---
 	async getPlans(): Promise<SubscriptionPlan[]> {
 		await delay();
 		return [...plansData];
 	},
 
-	// --- Subscriptions API ---
 	async getSubscriptions(
-		status?: string,
-		customerId?: string,
-	): Promise<Subscription[]> {
+		arg1?: any,
+		arg2?: any,
+		arg3?: any,
+		arg4?: any,
+	): Promise<any> {
 		await delay();
 		let result = [...subscriptionsData];
+
+		let status = "all";
+		let search = "";
+
+		if (typeof arg1 === "string" && isNaN(Number(arg1))) {
+			status = arg1;
+		} else if (typeof arg4 === "string") {
+			status = arg4;
+		}
+
+		if (typeof arg3 === "string") {
+			search = arg3;
+		}
+
 		if (status && status !== "all") {
 			result = result.filter((s) => s.status === status);
 		}
-		if (customerId) {
-			result = result.filter((s) => s.customerId === customerId);
+		if (search) {
+			const q = search.toLowerCase();
+			result = result.filter(
+				(s) =>
+					(s.subscriptionNumber &&
+						s.subscriptionNumber.toLowerCase().includes(q)) ||
+					(s.customerName &&
+						s.customerName.toLowerCase().includes(q)),
+			);
 		}
-		return result;
+
+		return createPaginatedArray(result);
 	},
 
-	async createSubscription(subData: {
-		customerId: string;
-		planId: string;
-		startDate: string;
-		billingCycle: "monthly" | "yearly";
-	}): Promise<Subscription> {
+	async createSubscription(subData: any): Promise<Subscription> {
 		await delay();
 		const customer = customersData.find((c) => c.id === subData.customerId);
 		const plan = plansData.find((p) => p.id === subData.planId);
 
+		const cycle =
+			subData.billingCycle ||
+			(subData.billingInterval === "yearly" ? "yearly" : "monthly");
 		const pricePaise =
-			subData.billingCycle === "yearly"
+			subData.amountInPaise ||
+			subData.priceInPaise ||
+			(cycle === "yearly"
 				? (plan?.priceYearlyPaise ?? 0)
-				: (plan?.priceMonthlyPaise ?? 0);
+				: (plan?.priceMonthlyPaise ?? 0));
 
 		const newSub: Subscription = {
 			id: `sub_${Date.now()}`,
 			subscriptionNumber: `SUB-${Math.floor(1000 + Math.random() * 9000)}`,
 			customerId: subData.customerId,
-			customerName: customer?.name ?? "Unknown Customer",
+			customerName:
+				subData.customerName || customer?.name || "Unknown Customer",
 			planId: subData.planId,
 			planName: plan?.name ?? "Unknown Plan",
 			status: "confirmed",
-			billingCycle: subData.billingCycle,
+			billingCycle: cycle,
+			billingInterval: cycle,
 			startDate: subData.startDate,
 			nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 				.toISOString()
 				.split("T")[0],
 			amountPaise: pricePaise,
+			amountInPaise: pricePaise,
 			currency: "INR",
 			createdAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString(),
@@ -206,7 +267,6 @@ export const apiService = {
 		return subscriptionsData[index];
 	},
 
-	// --- Invoices API ---
 	async getInvoices(
 		status?: string,
 		customerId?: string,
@@ -348,3 +408,34 @@ export const apiService = {
 		return paymentsData.filter((p) => p.invoiceId === invoiceId);
 	},
 };
+
+// Named Exports
+export const getDashboardSummary = apiService.getDashboardSummary;
+export const getDashboardAnalytics = apiService.getDashboardAnalytics;
+export const getCustomers = apiService.getCustomers;
+export const getCustomerById = apiService.getCustomerById;
+export const createCustomer = apiService.createCustomer;
+export const updateCustomer = apiService.updateCustomer;
+export const getCustomerSubscriptions = (customerId: string) =>
+	apiService.getSubscriptions(undefined, customerId);
+export const getCustomerInvoices = (customerId: string) =>
+	apiService.getInvoices(undefined, customerId);
+export const getProducts = apiService.getProducts;
+export const createProduct = apiService.createProduct;
+export const updateProduct = apiService.updateProduct;
+export const toggleProductStatus = async (id: string) => {
+	const products = await apiService.getProducts();
+	const p = (products.data || products).find((x: any) => x.id === id);
+	if (!p) throw new Error("Product not found");
+	const newStatus = p.status === "active" ? "inactive" : "active";
+	return apiService.updateProduct(id, { status: newStatus });
+};
+export const getPlans = apiService.getPlans;
+export const getSubscriptions = apiService.getSubscriptions;
+export const createSubscription = apiService.createSubscription;
+export const updateSubscriptionStatus = apiService.updateSubscriptionStatus;
+export const getInvoices = apiService.getInvoices;
+export const getInvoiceById = apiService.getInvoiceById;
+export const createInvoice = apiService.createInvoice;
+export const recordPayment = apiService.recordPayment;
+export const getPaymentsByInvoiceId = apiService.getPaymentsByInvoiceId;
