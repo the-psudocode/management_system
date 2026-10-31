@@ -15,19 +15,19 @@ import {
 	ChevronLeft,
 	ChevronRight,
 } from "lucide-react";
-import type { Customer, Subscription, Invoice } from "../types";
+import type { Customer, Subscription, Invoice } from "../../types";
 import {
 	getCustomers,
 	createCustomer,
 	updateCustomer,
 	getCustomerSubscriptions,
 	getCustomerInvoices,
-} from "../services/api";
+} from "../../services/api";
 import {
 	formatDate,
 	formatCurrency,
 	getStatusBadgeClass,
-} from "../utils/format";
+} from "../../utils/format";
 
 export const Customers: React.FC = () => {
 	const [customers, setCustomers] = useState<Customer[]>([]);
@@ -760,3 +760,5 @@ export const Customers: React.FC = () => {
 		</div>
 	);
 };
+
+export default Customers;

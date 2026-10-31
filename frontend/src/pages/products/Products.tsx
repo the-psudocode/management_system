@@ -13,14 +13,14 @@ import {
 	CheckCircle,
 	XCircle,
 } from "lucide-react";
-import type { Product, ProductVariant } from "../types";
+import type { Product, ProductVariant } from "../../types";
 import {
 	getProducts,
 	createProduct,
 	updateProduct,
 	toggleProductStatus,
-} from "../services/api";
-import { formatCurrency, formatDate } from "../utils/format";
+} from "../../services/api";
+import { formatCurrency, formatDate } from "../../utils/format";
 
 export const Products: React.FC = () => {
 	const [products, setProducts] = useState<Product[]>([]);
@@ -762,3 +762,5 @@ export const Products: React.FC = () => {
 		</div>
 	);
 };
+
+export default Products;
