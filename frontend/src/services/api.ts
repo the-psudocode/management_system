@@ -6,16 +6,19 @@
 import type {
 	Customer,
 	Product,
+	SubscriptionPlan,
 	Subscription,
 	Invoice,
 	DashboardSummary,
 	DashboardAnalytics,
 	PaginatedResponse,
+	SubscriptionStatus,
 } from "../types";
 
 import {
 	mockCustomers,
 	mockProducts,
+	mockPlans,
 	mockSubscriptions,
 	mockInvoices,
 	mockDashboardSummary,
@@ -128,7 +131,7 @@ export async function getCustomerInvoices(
 	return mockInvoices.filter((i) => i.customerId === customerId);
 }
 
-// ---------- PRODUCTS ----------
+// ---------- PRODUCTS & PLANS ----------
 
 export async function getProducts(
 	page = 1,
@@ -154,11 +157,6 @@ export async function getProducts(
 	}
 
 	return paginate(filtered, page, pageSize);
-}
-
-export async function getProductById(id: string): Promise<Product | undefined> {
-	await delay();
-	return mockProducts.find((p) => p.id === id);
 }
 
 export async function createProduct(
@@ -197,20 +195,75 @@ export async function toggleProductStatus(id: string): Promise<Product> {
 	throw new Error("Product not found");
 }
 
+export async function getPlans(): Promise<SubscriptionPlan[]> {
+	await delay();
+	return mockPlans;
+}
+
 // ---------- SUBSCRIPTIONS ----------
 
 export async function getSubscriptions(
 	page = 1,
 	pageSize = 10,
 	search = "",
+	statusFilter = "all",
 ): Promise<PaginatedResponse<Subscription>> {
 	await delay();
-	const filtered = search
-		? mockSubscriptions.filter((s) =>
-				s.customerName.toLowerCase().includes(search.toLowerCase()),
-			)
-		: mockSubscriptions;
+	let filtered = [...mockSubscriptions];
+
+	if (search) {
+		const q = search.toLowerCase();
+		filtered = filtered.filter(
+			(s) =>
+				s.customerName.toLowerCase().includes(q) ||
+				s.planName.toLowerCase().includes(q),
+		);
+	}
+
+	if (statusFilter !== "all") {
+		filtered = filtered.filter((s) => s.status === statusFilter);
+	}
+
 	return paginate(filtered, page, pageSize);
+}
+
+export async function createSubscription(
+	data: Omit<Subscription, "id" | "createdAt">,
+): Promise<Subscription> {
+	await delay();
+	const newSub: Subscription = {
+		...data,
+		id: `sub_${String(mockSubscriptions.length + 1).padStart(3, "0")}`,
+		createdAt: new Date().toISOString().split("T")[0],
+	};
+	mockSubscriptions.unshift(newSub);
+	if (newSub.status === "active") {
+		mockDashboardSummary.activeSubscriptions += 1;
+	}
+	return newSub;
+}
+
+export async function updateSubscriptionStatus(
+	id: string,
+	newStatus: SubscriptionStatus,
+): Promise<Subscription> {
+	await delay();
+	const sub = mockSubscriptions.find((s) => s.id === id);
+	if (sub) {
+		const oldStatus = sub.status;
+		sub.status = newStatus;
+
+		if (oldStatus !== "active" && newStatus === "active") {
+			mockDashboardSummary.activeSubscriptions += 1;
+		} else if (oldStatus === "active" && newStatus !== "active") {
+			mockDashboardSummary.activeSubscriptions = Math.max(
+				0,
+				mockDashboardSummary.activeSubscriptions - 1,
+			);
+		}
+		return sub;
+	}
+	throw new Error("Subscription not found");
 }
 
 // ---------- INVOICES ----------
