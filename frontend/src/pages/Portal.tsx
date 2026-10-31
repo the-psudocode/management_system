@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, Layers3, Package, RefreshCw } from "lucide-react";
+import { ArrowRight, Check, Layers3, Package, RefreshCw, ShoppingBag, X } from "lucide-react";
 import { acceptQuotation, createSubscription, getPlans, getPortalOverview } from "../services/api";
 import type { PortalOverview, SubscriptionPlan } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
@@ -33,6 +33,9 @@ export function Portal({ catalogOnly = false }: PortalProps) {
 	const [catalogIsDemo, setCatalogIsDemo] = useState(false);
 	const [notice, setNotice] = useState("");
 	const [workingPlanId, setWorkingPlanId] = useState<string | null>(null);
+	const [checkoutPlan, setCheckoutPlan] = useState<SubscriptionPlan | null>(null);
+	const [checkoutQuantity, setCheckoutQuantity] = useState(1);
+	const [purchaseNumber, setPurchaseNumber] = useState("");
 
 	async function load() {
 		setError("");
@@ -66,21 +69,27 @@ export function Portal({ catalogOnly = false }: PortalProps) {
 		}
 	}
 
-	async function handlePlanRequest(plan: SubscriptionPlan) {
-		if (!overview || catalogIsDemo) return;
-		setWorkingPlanId(plan.id);
+	function beginCheckout(plan: SubscriptionPlan) {
+		setCheckoutPlan(plan);
+		setCheckoutQuantity(Math.max(1, plan.minimumQuantity || 1));
+		setPurchaseNumber("");
+		setError("");
+		setNotice("");
+	}
+
+	async function completePurchase(event: React.FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		if (!checkoutPlan || !overview || catalogIsDemo) return;
+		setWorkingPlanId(checkoutPlan.id);
 		setError("");
 		setNotice("");
 		try {
-			await createSubscription({
-				customerId: overview.customer.id,
-				planId: plan.id,
-				quantity: plan.minimumQuantity || 1,
-			});
-			setNotice(`Your request for ${plan.productName} · ${plan.name} was sent to the Brightloop team.`);
+			const subscription = await createSubscription({ planId: checkoutPlan.id, quantity: checkoutQuantity });
+			setPurchaseNumber(subscription.subscriptionNumber || subscription.id);
+			setNotice("Subscription order submitted. It is a draft while the Brightloop team confirms activation.");
 			await load();
 		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : "Could not request this plan.");
+			setError(cause instanceof Error ? cause.message : "Could not submit this subscription order.");
 		} finally {
 			setWorkingPlanId(null);
 		}
@@ -106,16 +115,29 @@ export function Portal({ catalogOnly = false }: PortalProps) {
 				<p className="mt-1 min-h-10 text-xs leading-5 text-stone-500">{plan.description || plan.productDescription || "Subscription service from Brightloop."}</p>
 				<div className="mt-4 flex items-baseline gap-1"><span className="text-2xl font-extrabold tracking-tight text-stone-900">{formatCurrency(Number(plan.priceInPaise))}</span><span className="text-xs text-stone-500">{intervalLabel(plan.billingInterval)}</span></div>
 				{(plan.minimumQuantity || 1) > 1 && <p className="mt-2 text-[11px] text-stone-500">Minimum quantity: {plan.minimumQuantity}</p>}
-				<button type="button" disabled={catalogIsDemo || requested || workingPlanId !== null} onClick={() => void handlePlanRequest(plan)} className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${requested ? "border border-[#dce5d8] bg-[#f4f7f1] text-[#526d4f]" : "bg-[#263b2d] text-white hover:bg-[#344d39]"}`}>
-					{catalogIsDemo ? "Demo preview only" : requested ? <><Check size={14} /> Request sent</> : workingPlanId === plan.id ? "Sending request…" : <>Request this plan <ArrowRight size={14} /> </>}
+				<button type="button" disabled={catalogIsDemo || requested || workingPlanId !== null} onClick={() => beginCheckout(plan)} className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${requested ? "border border-[#dce5d8] bg-[#f4f7f1] text-[#526d4f]" : "bg-[#263b2d] text-white hover:bg-[#344d39]"}`}>
+					{catalogIsDemo ? "Demo preview only" : requested ? <><Check size={14} /> Subscription exists</> : <>Subscribe <ArrowRight size={14} /> </>}
 				</button>
 			</article>;
 		})}</div> : !catalogError && <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center"><span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf1e9] text-[#526d4f]"><Layers3 size={19} /></span><h3 className="mt-3 text-sm font-bold text-stone-800">No plans are published yet</h3><p className="mt-1 text-xs text-stone-500">The Brightloop team is preparing the catalog. Check back soon.</p></div>}
 	</section>;
 
-	if (catalogOnly) return <section className="mx-auto max-w-6xl space-y-6 p-4 md:p-6"><header className="flex items-start justify-between gap-4"><div><h1 className="text-2xl font-bold text-stone-900">Browse plans</h1><p className="mt-1 text-sm text-stone-500">Explore services available for your account.</p></div><Link to="/portal" className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50">My dashboard</Link></header>{error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}{notice && <p role="status" className="rounded-xl border border-[#dce5d8] bg-[#edf1e9] p-3 text-sm text-[#425b3f]">{notice}</p>}{catalogSection}</section>;
+	const checkoutDialog = checkoutPlan && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/45 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !purchaseNumber) setCheckoutPlan(null); }}>
+		<div role="dialog" aria-modal="true" aria-labelledby="checkout-title" className="w-full max-w-lg rounded-2xl border border-stone-200 bg-[#fffefa] p-5 shadow-2xl sm:p-7">
+			<div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#60775c]">Subscription checkout</p><h2 id="checkout-title" className="mt-1 text-xl font-bold text-stone-900">{purchaseNumber ? "Order submitted" : "Confirm your plan"}</h2></div>{!purchaseNumber && <button type="button" aria-label="Close checkout" onClick={() => setCheckoutPlan(null)} className="rounded-lg p-2 text-stone-500 hover:bg-stone-100"><X size={18} /></button>}</div>
+			{purchaseNumber ? <div className="mt-5 space-y-4"><div className="rounded-xl border border-[#dce5d8] bg-[#f4f7f1] p-4"><p className="text-sm font-semibold text-[#344a35]">Subscription order {purchaseNumber}</p><p className="mt-1 text-xs leading-5 text-stone-600">Status: Draft. The Brightloop team must confirm and activate it. An invoice is issued through the billing process after activation.</p></div><button type="button" onClick={() => setCheckoutPlan(null)} className="w-full rounded-xl bg-[#263b2d] px-4 py-3 text-sm font-bold text-white hover:bg-[#344d39]">Done</button></div> : <form onSubmit={(event) => void completePurchase(event)} className="mt-5 space-y-4">
+				<div className="rounded-xl border border-stone-200 bg-white p-4"><p className="text-xs text-stone-500">{checkoutPlan.productName}</p><p className="mt-1 font-bold text-stone-900">{checkoutPlan.name}</p><p className="mt-1 text-xs text-stone-500">{checkoutPlan.description || checkoutPlan.productDescription}</p></div>
+				<label className="block"><span className="text-xs font-semibold text-stone-700">Quantity</span><input type="number" min={checkoutPlan.minimumQuantity || 1} max="100" step="1" required value={checkoutQuantity} onChange={(event) => setCheckoutQuantity(Math.max(checkoutPlan.minimumQuantity || 1, Math.min(100, Number(event.target.value) || 1)))} className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#71866b]" /></label>
+				<div className="space-y-2 rounded-xl bg-[#f4f6f1] p-4 text-sm"><div className="flex justify-between text-stone-600"><span>Plan price</span><span>{formatCurrency(Number(checkoutPlan.priceInPaise))} {intervalLabel(checkoutPlan.billingInterval)}</span></div><div className="flex justify-between text-stone-600"><span>Quantity</span><span>{checkoutQuantity}</span></div><div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900"><span>Recurring subtotal</span><span>{formatCurrency(Number(BigInt(Math.trunc(Number(checkoutPlan.priceInPaise))) * BigInt(checkoutQuantity)))} / {intervalLabel(checkoutPlan.billingInterval)}</span></div><p className="text-[11px] leading-4 text-stone-500">Taxes and discounts, if applicable, are calculated by the server when billing generates an invoice.</p></div>
+				{error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-xs text-rose-700">{error}</p>}
+				<div className="flex gap-3"><button type="button" onClick={() => setCheckoutPlan(null)} className="flex-1 rounded-xl border border-stone-300 bg-white px-4 py-3 text-sm font-semibold text-stone-700 hover:bg-stone-50">Cancel</button><button type="submit" disabled={workingPlanId !== null} className="flex-1 rounded-xl bg-[#263b2d] px-4 py-3 text-sm font-bold text-white hover:bg-[#344d39] disabled:opacity-60"><ShoppingBag size={15} className="mr-2 inline" />{workingPlanId ? "Submitting…" : "Confirm subscription"}</button></div>
+			</form>}
+		</div>
+	</div>;
 
-	return <section className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+	if (catalogOnly) return <><section className="mx-auto max-w-6xl space-y-6 p-4 md:p-6"><header className="flex items-start justify-between gap-4"><div><h1 className="text-2xl font-bold text-stone-900">Browse plans</h1><p className="mt-1 text-sm text-stone-500">Explore services available for your account.</p></div><Link to="/portal" className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50">My dashboard</Link></header>{error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}{notice && <p role="status" className="rounded-xl border border-[#dce5d8] bg-[#edf1e9] p-3 text-sm text-[#425b3f]">{notice}</p>}{catalogSection}</section>{checkoutDialog}</>;
+
+	return <><section className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
 		<header><h1 className="text-2xl font-bold text-slate-900">Welcome, {overview.customer.name}</h1><p className="text-sm text-slate-500">Your Brightloop Billing account overview.</p></header>
 		{error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
 		{notice && <p role="status" className="rounded-xl border border-[#dce5d8] bg-[#edf1e9] p-3 text-sm text-[#425b3f]">{notice}</p>}
@@ -130,7 +152,7 @@ export function Portal({ catalogOnly = false }: PortalProps) {
 		<div className="rounded-2xl border border-stone-200 bg-white p-5"><h2 className="mb-3 font-semibold">Invoices</h2>{overview.invoices.length === 0 ? <p className="text-sm text-stone-500">No invoices yet. Invoices appear here after a subscription is activated and billed.</p> : <div className="divide-y divide-stone-100">{overview.invoices.map((invoice) => <div key={invoice.id} className="flex flex-wrap justify-between gap-3 py-3"><span>{invoice.invoiceNumber || invoice.number || invoice.id} <span className="ml-2 text-sm capitalize text-stone-500">{invoice.status}</span></span><span className="font-semibold">{formatCurrency(Number(invoice.totalInPaise ?? invoice.totalPaise ?? 0))}</span></div>)}</div>}</div>
 		<div className="rounded-2xl border border-stone-200 bg-white p-5"><h2 className="mb-1 font-semibold">Quotations</h2>{overview.quotations.length === 0 ? <p className="mt-3 text-sm text-stone-500">No quotations yet.</p> : <ul className="divide-y divide-stone-100">{overview.quotations.map((quote) => <li key={quote.id} className="flex flex-wrap items-center justify-between gap-4 py-3"><span>{quote.number} <span className="ml-2 text-sm capitalize text-stone-500">{quote.status}</span></span><span>{formatCurrency(Number(quote.totalPaise))} · valid until {formatDate(quote.validUntil)}</span>{quote.status === "sent" && <button onClick={() => void handleAccept(quote.id)} className="rounded-lg bg-[#263b2d] px-3 py-2 text-xs font-bold text-white">Accept quotation</button>}</li>)}</ul>}</div>
 		<div className="rounded-2xl border border-stone-200 bg-white p-5"><h2 className="mb-3 font-semibold">Payments</h2>{overview.payments.length === 0 ? <p className="text-sm text-stone-500">No payments recorded.</p> : <ul className="divide-y divide-stone-100">{overview.payments.map((payment) => <li key={payment.id} className="flex flex-wrap justify-between gap-3 py-3"><span>{payment.reference || payment.id} · {payment.method}</span><span>{formatCurrency(Number(payment.amountPaise || payment.amountInPaise || 0))} · {formatDate(payment.receivedAt || payment.paymentDate || "")}</span></li>)}</ul>}</div>
-	</section>;
+	</section>{checkoutDialog}</>;
 }
 
 export default Portal;
