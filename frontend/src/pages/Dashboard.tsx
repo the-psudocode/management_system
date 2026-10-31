@@ -16,9 +16,9 @@ import {
 	CartesianGrid,
 	Tooltip,
 } from "recharts";
-import type { DashboardSummary, DashboardAnalytics } from "../../types";
-import { getDashboardSummary, getDashboardAnalytics } from "../../services/api";
-import { formatCurrency } from "../../utils/format";
+import type { DashboardSummary, DashboardAnalytics } from "../types";
+import { getDashboardSummary, getDashboardAnalytics } from "../services/api";
+import { formatCurrency } from "../utils/format";
 
 export const Dashboard: React.FC = () => {
 	const [summary, setSummary] = useState<DashboardSummary | null>(null);
