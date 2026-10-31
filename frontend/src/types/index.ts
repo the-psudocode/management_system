@@ -18,6 +18,7 @@ export type InvoiceStatus =
 	| "partially_paid"
 	| "paid"
 	| "overdue"
+	| "cancelled"
 	| "void";
 
 export type UserRole = "admin" | "staff" | "customer";
@@ -25,6 +26,14 @@ export type UserRole = "admin" | "staff" | "customer";
 export type BillingInterval = "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
 
 export type DiscountType = "fixed" | "percentage";
+export type QuotationStatus = "draft" | "sent" | "accepted" | "declined" | "expired" | "converted";
+
+export interface AuthProfile {
+	id: string;
+	name: string;
+	email: string;
+	role: UserRole;
+}
 
 export interface Customer {
 	id: string;
@@ -158,33 +167,57 @@ export interface Invoice {
 	customerName: string;
 	customerEmail?: string;
 	customer?: any;
-	subscriptionId: string;
+	subscriptionId?: string;
 	subscription?: any;
 	status: InvoiceStatus;
 	currency?: string;
 	lineItems?: InvoiceLineItem[];
 	items?: any[];
-	subtotalInPaise: number;
+	subtotalInPaise?: number;
 	subtotalPaise: number;
-	taxInPaise: number;
+	taxInPaise?: number;
 	taxPaise: number;
-	discountInPaise: number;
+	discountInPaise?: number;
 	discountPaise: number;
-	totalInPaise: number;
+	totalInPaise?: number;
 	totalPaise: number;
-	amountPaidInPaise: number;
+	amountPaidInPaise?: number;
 	paidAmountPaise: number;
 	amountPaidPaise?: number;
-	outstandingInPaise: number;
+	outstandingInPaise?: number;
 	balanceDuePaise: number;
-	billingPeriodStart: string;
-	billingPeriodEnd: string;
+	billingPeriodStart?: string;
+	billingPeriodEnd?: string;
 	dueDate: string;
 	issueDate?: string;
 	issuedAt?: string | null;
 	allocations?: any[];
 	createdAt: string;
 	updatedAt?: string;
+}
+
+export interface Quotation {
+	id: string;
+	number: string;
+	customerId: string;
+	status: QuotationStatus;
+	currency: string;
+	validUntil: string;
+	subtotalPaise: number | string;
+	taxPaise: number | string;
+	discountPaise: number | string;
+	totalPaise: number | string;
+	createdAt: string;
+	customer?: Pick<Customer, "id" | "company">;
+	items?: Array<{ id: string; description: string; quantity: number; unitPricePaise: number | string }>;
+}
+
+export interface PortalOverview {
+	customer: Customer;
+	subscriptions: Subscription[];
+	invoices: Invoice[];
+	quotations: Quotation[];
+	payments: Payment[];
 }
 
 export interface Payment {
@@ -206,6 +239,7 @@ export interface Payment {
 	notes?: string;
 	currency?: string;
 	allocations?: any[];
+	status?: string;
 	createdAt?: string;
 }
 

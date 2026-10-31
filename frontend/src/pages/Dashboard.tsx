@@ -45,9 +45,9 @@ export const DashboardPage: React.FC = () => {
 
 	if (loading || !summary || !analytics) {
 		return (
-			<div className="flex items-center justify-center min-h-[400px]">
+			<div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-stone-200 bg-white">
 				<div className="text-gray-500 font-medium">
-					Loading executive dashboard...
+					Loading your business overview…
 				</div>
 			</div>
 		);
@@ -67,14 +67,14 @@ export const DashboardPage: React.FC = () => {
 		summary.overdueInvoicesCount ?? summary.overdueInvoices ?? 0;
 
 	return (
-		<div className="p-6 space-y-6">
+		<div className="space-y-5">
 			<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 				<div>
-					<h1 className="text-2xl font-bold text-gray-900">
-						Executive Billing Dashboard
+					<h1 className="text-2xl font-bold tracking-tight text-gray-900">
+						Business performance
 					</h1>
 					<p className="text-sm text-gray-500">
-						Real-time revenue analytics & subscription health
+						Revenue, subscriptions and receivables at a glance
 					</p>
 				</div>
 			</div>
@@ -90,7 +90,7 @@ export const DashboardPage: React.FC = () => {
 					</div>
 					<div className="flex items-center text-xs text-emerald-600 mt-2 font-medium">
 						<ArrowUpRight className="w-3.5 h-3.5 mr-1" />
-						+8.4% from last month
+						Current monthly run rate
 					</div>
 				</div>
 
@@ -158,12 +158,12 @@ export const DashboardPage: React.FC = () => {
 								>
 									<stop
 										offset="5%"
-										stopColor="#4f46e5"
+						stopColor="#526d4f"
 										stopOpacity={0.8}
 									/>
 									<stop
 										offset="95%"
-										stopColor="#4f46e5"
+						stopColor="#526d4f"
 										stopOpacity={0}
 									/>
 								</linearGradient>
@@ -196,7 +196,7 @@ export const DashboardPage: React.FC = () => {
 							<Area
 								type="monotone"
 								dataKey="mrr"
-								stroke="#4f46e5"
+				stroke="#526d4f"
 								strokeWidth={2}
 								fillOpacity={1}
 								fill="url(#mrrGradient)"
@@ -252,3 +252,5 @@ export const DashboardPage: React.FC = () => {
 		</div>
 	);
 };
+
+export const Dashboard = DashboardPage;

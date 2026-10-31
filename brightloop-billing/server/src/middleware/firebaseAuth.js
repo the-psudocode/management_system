@@ -1,9 +1,11 @@
+// brightloop-billing/server/src/middleware/firebaseAuth.js
 import fs from 'node:fs';
 import path from 'node:path';
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import prisma from '../database/index.js';
 import { ApiError } from '../utils/ApiError.js';
+import { verifyNativeToken } from '../utils/token.js';
 
 let authInstance;
 
@@ -37,13 +39,51 @@ function firebaseAuthClient() {
   return authInstance;
 }
 
+export async function verifyFirebaseIdToken(token) {
+  return firebaseAuthClient().verifyIdToken(token, false);
+}
+
 export async function requireFirebaseUser(req, res, next) {
+  // Allow public endpoints through
+  if (req.path === '/auth/login' || req.path === '/auth/signup' || req.path === '/health') {
+    return next();
+  }
+
   const authorization = req.headers.authorization || '';
   const match = authorization.match(/^Bearer\s+(.+)$/i);
-  if (!match) return next(ApiError.unauthorized('A Firebase ID token is required.'));
+  if (!match) return next(ApiError.unauthorized('Authentication token is required.'));
 
+  const rawToken = match[1];
+
+  // 1. Check native JWT token first
   try {
-    const decoded = await firebaseAuthClient().verifyIdToken(match[1], true);
+    const nativePayload = verifyNativeToken(rawToken);
+    if (nativePayload && nativePayload.id) {
+      const user = await prisma.user.findUnique({
+        where: { id: nativePayload.id },
+        select: { id: true, firebaseUid: true, email: true, name: true, role: true, status: true },
+      });
+
+      if (!user || String(user.status ?? '').trim().toLowerCase() !== 'active') {
+        return next(ApiError.forbidden('This account is not active in Brightloop Billing.'));
+      }
+
+      req.user = {
+        id: user.id,
+        firebaseUid: user.firebaseUid,
+        email: user.email,
+        name: user.name,
+        role: String(user.role).trim().toLowerCase(),
+      };
+      return next();
+    }
+  } catch (err) {
+    // Fall through to Firebase check
+  }
+
+  // 2. Fall back to Firebase ID token verification
+  try {
+    const decoded = await verifyFirebaseIdToken(rawToken);
     let user = await prisma.user.findUnique({
       where: { firebaseUid: decoded.uid },
       select: { id: true, firebaseUid: true, email: true, name: true, role: true, status: true },
@@ -51,7 +91,7 @@ export async function requireFirebaseUser(req, res, next) {
 
     if (!user && decoded.email) {
       user = await prisma.user.findFirst({
-        where: { email: decoded.email },
+        where: { email: { equals: decoded.email.trim(), mode: 'insensitive' } },
         select: { id: true, firebaseUid: true, email: true, name: true, role: true, status: true },
       });
       if (user) {
@@ -62,19 +102,25 @@ export async function requireFirebaseUser(req, res, next) {
       }
     }
 
-    if (!user || user.status !== 'active') {
+    if (!user || String(user.status ?? '').trim().toLowerCase() !== 'active') {
       return next(ApiError.forbidden('This account is not active in Brightloop Billing.'));
     }
 
-    req.user = { id: user.id, firebaseUid: user.firebaseUid, email: user.email, name: user.name, role: user.role };
+    req.user = {
+      id: user.id,
+      firebaseUid: user.firebaseUid,
+      email: user.email,
+      name: user.name,
+      role: String(user.role).trim().toLowerCase(),
+    };
     return next();
   } catch (error) {
     if (error instanceof ApiError) return next(error);
     if (error?.code?.startsWith('auth/')) {
-      return next(ApiError.unauthorized('The Firebase ID token is invalid, expired, or revoked.'));
+      return next(ApiError.unauthorized('The authentication token is invalid, expired, or revoked.'));
     }
     if (error?.code === 'app/invalid-credential' || error?.code === 'app/no-app') {
-      return next(new ApiError(503, 'Firebase Admin credentials are unavailable.'));
+      return next(new ApiError(503, 'Authentication service is unavailable.'));
     }
     return next(error);
   }

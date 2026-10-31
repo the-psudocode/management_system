@@ -3,6 +3,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import {
 	getAuth,
 	signInWithEmailAndPassword,
+	createUserWithEmailAndPassword,
 	signOut,
 	onAuthStateChanged,
 } from "firebase/auth";
@@ -25,6 +26,11 @@ export async function loginWithEmail(email: string, password: string): Promise<U
 	return userCredential.user;
 }
 
+export async function signUpWithEmail(email: string, password: string): Promise<User> {
+	const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+	return userCredential.user;
+}
+
 export async function logoutUser(): Promise<void> {
 	await signOut(auth);
 }
@@ -36,7 +42,13 @@ export async function getCurrentUserToken(): Promise<string | null> {
 	}
 
 	return new Promise((resolve) => {
+		const timeout = setTimeout(() => {
+			unsubscribe();
+			resolve(null);
+		}, 2500);
+
 		const unsubscribe = onAuthStateChanged(auth, async (u) => {
+			clearTimeout(timeout);
 			unsubscribe();
 			if (u) {
 				const token = await u.getIdToken();

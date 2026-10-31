@@ -13,6 +13,8 @@ import paymentRoutes from './modules/payments/routes.js';
 import ruleRoutes from './modules/rules/routes.js';
 import analyticsRoutes from './modules/analytics/routes.js';
 import quotationRoutes from './modules/quotations/routes.js';
+import portalRoutes from './modules/portal/routes.js';
+import authRoutes from './modules/auth/routes.js';
 
 export const createApp = () => {
   const app = express();
@@ -44,9 +46,18 @@ export const createApp = () => {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  // Public authentication routes (login, signup) mounted before requireFirebaseUser
+  app.use('/api/v1', authRoutes);
+
   const api = express.Router();
   api.use(requireFirebaseUser);
-  api.use(catalogRoutes, billingRoutes, paymentRoutes, ruleRoutes, analyticsRoutes, quotationRoutes, subscriptionRoutes);
+  api.get('/me', (req, res) => sendSuccess(res, {
+    id: req.user.id,
+    name: req.user.name,
+    email: req.user.email,
+    role: req.user.role,
+  }));
+  api.use(catalogRoutes, billingRoutes, paymentRoutes, ruleRoutes, analyticsRoutes, quotationRoutes, subscriptionRoutes, portalRoutes);
   app.use('/api/v1', api);
 
   // Root endpoint

@@ -12,9 +12,12 @@ import type {
 	DashboardAnalytics,
 	PaginatedResponse,
 	SubscriptionStatus,
+	AuthProfile,
+	Quotation,
+	PortalOverview,
 } from "../types";
 
-const API_BASE_URL = "http://localhost:5000/api/v1";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/v1";
 
 export const apiClient = axios.create({
 	baseURL: API_BASE_URL,
@@ -25,12 +28,17 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(async (config) => {
 	try {
+		const storedToken = localStorage.getItem("brightloop_token");
+		if (storedToken) {
+			config.headers.Authorization = `Bearer ${storedToken}`;
+			return config;
+		}
 		const token = await getCurrentUserToken();
 		if (token) {
 			config.headers.Authorization = `Bearer ${token}`;
 		}
 	} catch (err) {
-		console.warn("Could not retrieve Firebase ID token:", err);
+		console.warn("Could not retrieve authentication token:", err);
 	}
 	return config;
 });
@@ -56,6 +64,82 @@ apiClient.interceptors.response.use(
 // ============================================================
 // Customers API
 // ============================================================
+
+export async function getCurrentUserProfile(): Promise<AuthProfile> {
+	const profile: any = await apiClient.get("/me");
+	return { ...profile, role: String(profile.role).toLowerCase() as AuthProfile["role"] };
+}
+
+export async function registerCustomerAccount(data: { name: string; companyName?: string; phone?: string }): Promise<void> {
+	await apiClient.post('/auth/register', data);
+}
+
+export async function getPortalOverview(): Promise<PortalOverview> {
+	const overview: any = await apiClient.get("/portal");
+	return {
+		...overview,
+		invoices: (overview.invoices || []).map(mapInvoice),
+		payments: (overview.payments || []).map((p: any) => ({
+			id: p.id,
+			customerId: overview.customer?.id,
+			amountInPaise: Number(p.amountPaise || 0),
+			amountPaise: Number(p.amountPaise || 0),
+			paymentMethod: p.method,
+			method: p.method,
+			reference: p.reference || "",
+			referenceNumber: p.reference || "",
+			date: p.receivedAt,
+			paymentDate: p.receivedAt,
+			notes: p.notes || "",
+			allocations: p.allocations || [],
+		})),
+	};
+}
+
+function mapQuotation(q: any): Quotation {
+	return {
+		id: q.id,
+		number: q.number,
+		customerId: q.customerId,
+		status: q.status,
+		currency: q.currency || "INR",
+		validUntil: q.validUntil,
+		subtotalPaise: q.subtotalPaise,
+		taxPaise: q.taxPaise,
+		discountPaise: q.discountPaise,
+		totalPaise: q.totalPaise,
+		createdAt: q.createdAt,
+		customer: q.customer ? { id: q.customer.id, company: q.customer.companyName || "" } : undefined,
+		items: q.items || [],
+	};
+}
+
+export async function getQuotations(page = 1, pageSize = 20): Promise<PaginatedResponse<Quotation>> {
+	const result: any = await apiClient.get("/quotations", { params: { page, pageSize } });
+	return {
+		data: (result.data || []).map(mapQuotation),
+		total: result.total || 0,
+		page: result.page || page,
+		pageSize: result.pageSize || pageSize,
+		totalPages: result.totalPages || 1,
+	};
+}
+
+export async function createQuotation(data: { customerId: string; planId: string; productId: string; quantity?: number }): Promise<Quotation> {
+	const result: any = await apiClient.post("/quotations", {
+		customerId: data.customerId,
+		items: [{ productId: data.productId, planId: data.planId, quantity: data.quantity || 1 }],
+	});
+	return mapQuotation(result);
+}
+
+export async function sendQuotation(id: string): Promise<Quotation> {
+	return mapQuotation(await apiClient.post(`/quotations/${id}/send`));
+}
+
+export async function acceptQuotation(id: string): Promise<Quotation> {
+	return mapQuotation(await apiClient.post(`/quotations/${id}/accept`));
+}
 
 export async function getCustomers(
 	page = 1,
@@ -94,8 +178,11 @@ export async function getCustomers(
 }
 
 export async function createCustomer(data: any): Promise<Customer> {
+	if (!data.userId) {
+		throw new Error("Customer creation requires the ID of an existing Firebase-linked customer account.");
+	}
 	const payload: Record<string, any> = {
-		userId: data.userId || "pre-existing-id",
+		userId: data.userId,
 		company: data.company || data.name,
 		phone: data.phone || undefined,
 		address: data.address || undefined,
@@ -464,6 +551,33 @@ export async function getPaymentsByInvoiceId(invoiceId: string): Promise<Payment
 	return matching;
 }
 
+export async function getPayments(page = 1, pageSize = 50): Promise<PaginatedResponse<Payment>> {
+	const result: any = await apiClient.get("/payments", { params: { page, pageSize } });
+	const payments = (result.data || []).map((p: any) => ({
+		id: p.id,
+		invoiceId: p.allocations?.[0]?.invoiceId,
+		customerId: p.customerId,
+		customerName: p.customer?.companyName || p.customer?.user?.name || "Customer",
+		amountInPaise: Number(p.amountPaise || 0),
+		amountPaise: Number(p.amountPaise || 0),
+		paymentMethod: p.method,
+		method: p.method,
+		reference: p.reference || "",
+		referenceNumber: p.reference || "",
+		date: p.receivedAt,
+		paymentDate: p.receivedAt,
+		notes: p.notes || "",
+		allocations: p.allocations || [],
+	}));
+	return {
+		data: payments,
+		total: result.total || payments.length,
+		page: result.page || page,
+		pageSize: result.pageSize || pageSize,
+		totalPages: result.totalPages || 1,
+	};
+}
+
 // ============================================================
 // Dashboard Analytics API
 // ============================================================
@@ -471,13 +585,22 @@ export async function getPaymentsByInvoiceId(invoiceId: string): Promise<Payment
 export async function getDashboardSummary(): Promise<DashboardSummary> {
 	const res: any = await apiClient.get("/analytics/dashboard");
 	const s = res.summary || {};
+	const mrr = Number(s.mrrInPaise || 0);
+	const arr = Number(s.arrInPaise || 0);
+	const rev = Number(s.totalRevenueInPaise || 0);
+	const out = Number(s.outstandingInPaise || 0);
+	const over = Number(s.overdueInvoices || 0);
 	return {
 		activeSubscriptions: Number(s.activeSubscriptions || 0),
-		mrrInPaise: Number(s.mrrInPaise || 0),
-		arrInPaise: Number(s.arrInPaise || 0),
-		totalRevenueInPaise: Number(s.totalRevenueInPaise || 0),
-		outstandingInPaise: Number(s.outstandingInPaise || 0),
-		overdueInvoices: Number(s.overdueInvoices || 0),
+		mrrInPaise: mrr,
+		mrrPaise: mrr,
+		arrInPaise: arr,
+		arrPaise: arr,
+		totalRevenueInPaise: rev,
+		outstandingInPaise: out,
+		overdueAmountPaise: out,
+		overdueInvoices: over,
+		overdueInvoicesCount: over,
 		totalCustomers: Number(s.totalCustomers || 0),
 		newCustomersThisMonth: Number(s.newCustomersThisMonth || 0),
 	};
@@ -486,28 +609,96 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
 export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
 	const res: any = await apiClient.get("/analytics/dashboard");
 	const a = res.analytics || {};
-	return {
-		revenueTrend: (a.revenueTrend || []).map((t: any) => ({
-			month: t.month ? new Date(t.month).toLocaleString("default", { month: "short" }) : "Month",
-			revenue: Number(t.revenue || 0),
-			subscriptions: Number(t.subscriptions || 0),
-		})),
-		subscriptionStats: {
-			active: Number(a.subscriptionStats?.active || 0),
-			draft: Number(a.subscriptionStats?.draft || 0),
-			paused: Number(a.subscriptionStats?.paused || 0),
-			closed: Number(a.subscriptionStats?.closed || 0),
-		},
-		overdueAging: (a.overdueAging || []).map((ag: any) => ({
-			range: ag.range,
-			count: Number(ag.count || 0),
-			amountInPaise: Number(ag.amountInPaise || 0),
-		})),
+	const trend = (a.revenueTrend || []).map((t: any) => ({
+		month: t.month ? new Date(t.month).toLocaleString("default", { month: "short" }) : "Month",
+		revenue: Number(t.revenue || 0),
+		mrrPaise: Number(t.revenue || t.mrrPaise || 0),
+		arrPaise: Number(t.revenue ? t.revenue * 12 : t.arrPaise || 0),
+		subscriptions: Number(t.subscriptions || 0),
+	}));
+	const stats = {
+		active: Number(a.subscriptionStats?.active || 0),
+		draft: Number(a.subscriptionStats?.draft || 0),
+		paused: Number(a.subscriptionStats?.paused || 0),
+		closed: Number(a.subscriptionStats?.closed || 0),
 	};
+	const subscriptionsByStatus = Array.isArray(a.subscriptionsByStatus)
+		? a.subscriptionsByStatus
+		: [
+			{ status: "active", count: stats.active },
+			{ status: "draft", count: stats.draft },
+			{ status: "paused", count: stats.paused },
+			{ status: "closed", count: stats.closed },
+		];
+	const aging = (a.overdueAging || []).map((ag: any) => ({
+		range: ag.range || "1-30 Days",
+		count: Number(ag.count || 0),
+		amountInPaise: Number(ag.amountInPaise || ag.amountPaise || 0),
+		amountPaise: Number(ag.amountInPaise || ag.amountPaise || 0),
+	}));
+	return {
+		revenueTrend: trend,
+		revenueHistory: trend,
+		subscriptionStats: stats,
+		subscriptionsByStatus,
+		overdueAging: aging,
+		agingOverdue: aging,
+	};
+}
+
+// ============================================================
+// Authentication API
+// ============================================================
+
+export async function loginUser(email: string, password: string) {
+	const res: any = await apiClient.post("/auth/login", { email, password });
+	if (res?.token) {
+		localStorage.setItem("brightloop_token", res.token);
+	}
+	if (res?.user) {
+		localStorage.setItem("brightloop_user", JSON.stringify(res.user));
+	}
+	return res;
+}
+
+export async function signupUser(data: {
+	name: string;
+	email: string;
+	password: string;
+	role?: string;
+	companyName?: string;
+	phone?: string;
+}) {
+	const res: any = await apiClient.post("/auth/signup", data);
+	if (res?.token) {
+		localStorage.setItem("brightloop_token", res.token);
+	}
+	if (res?.user) {
+		localStorage.setItem("brightloop_user", JSON.stringify(res.user));
+	}
+	return res;
+}
+
+export function logout() {
+	localStorage.removeItem("brightloop_token");
+	localStorage.removeItem("brightloop_user");
+}
+
+export function getStoredUser() {
+	try {
+		const raw = localStorage.getItem("brightloop_user");
+		return raw ? JSON.parse(raw) : null;
+	} catch {
+		return null;
+	}
 }
 
 // Unified apiService object matching Invoices.tsx expectations
 export const apiService = {
+	login: loginUser,
+	signup: signupUser,
+	logout,
+	getStoredUser,
 	getCustomers: async () => {
 		const res = await getCustomers(1, 100);
 		return res.data;
