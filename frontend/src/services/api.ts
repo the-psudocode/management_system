@@ -1,283 +1,350 @@
-// ============================================================
-// src/services/api.ts
-// API service layer with full CRUD support for local state
-// ============================================================
-
-import type {
-	Customer,
-	Product,
-	SubscriptionPlan,
-	Subscription,
-	Invoice,
-	DashboardSummary,
-	DashboardAnalytics,
-	PaginatedResponse,
-	SubscriptionStatus,
-} from "../types";
-
+// frontend/src/services/api.ts
 import {
 	mockCustomers,
 	mockProducts,
 	mockPlans,
 	mockSubscriptions,
 	mockInvoices,
+	mockPayments,
 	mockDashboardSummary,
 	mockDashboardAnalytics,
 } from "../data/mockData";
+import {
+	Customer,
+	Product,
+	SubscriptionPlan,
+	Subscription,
+	Invoice,
+	Payment,
+	DashboardSummary,
+	DashboardAnalytics,
+} from "../types";
 
-const delay = (ms = 200) => new Promise((r) => setTimeout(r, ms));
+let customersData: Customer[] = [...mockCustomers];
+let productsData: Product[] = [...mockProducts];
+let plansData: SubscriptionPlan[] = [...mockPlans];
+let subscriptionsData: Subscription[] = [...mockSubscriptions];
+let invoicesData: Invoice[] = [...mockInvoices];
+let paymentsData: Payment[] = [...mockPayments];
 
-function paginate<T>(
-	items: T[],
-	page: number,
-	pageSize: number,
-): PaginatedResponse<T> {
-	const start = (page - 1) * pageSize;
-	return {
-		data: items.slice(start, start + pageSize),
-		total: items.length,
-		page,
-		pageSize,
-		totalPages: Math.ceil(items.length / pageSize) || 1,
-	};
-}
+const delay = (ms = 200) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// ---------- DASHBOARD ----------
+export const apiService = {
+	// --- Dashboard API ---
+	async getDashboardSummary(): Promise<DashboardSummary> {
+		await delay();
+		return { ...mockDashboardSummary };
+	},
 
-export async function getDashboardSummary(): Promise<DashboardSummary> {
-	await delay();
-	return mockDashboardSummary;
-}
+	async getDashboardAnalytics(): Promise<DashboardAnalytics> {
+		await delay();
+		return { ...mockDashboardAnalytics };
+	},
 
-export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
-	await delay();
-	return mockDashboardAnalytics;
-}
-
-// ---------- CUSTOMERS ----------
-
-export async function getCustomers(
-	page = 1,
-	pageSize = 10,
-	search = "",
-	statusFilter = "all",
-): Promise<PaginatedResponse<Customer>> {
-	await delay();
-	let filtered = [...mockCustomers];
-
-	if (search) {
-		const q = search.toLowerCase();
-		filtered = filtered.filter(
-			(c) =>
-				c.name.toLowerCase().includes(q) ||
-				c.email.toLowerCase().includes(q) ||
-				c.company.toLowerCase().includes(q) ||
-				c.city.toLowerCase().includes(q),
-		);
-	}
-
-	if (statusFilter !== "all") {
-		filtered = filtered.filter((c) => c.status === statusFilter);
-	}
-
-	return paginate(filtered, page, pageSize);
-}
-
-export async function getCustomerById(
-	id: string,
-): Promise<Customer | undefined> {
-	await delay();
-	return mockCustomers.find((c) => c.id === id);
-}
-
-export async function createCustomer(
-	data: Omit<Customer, "id" | "createdAt">,
-): Promise<Customer> {
-	await delay();
-	const newCustomer: Customer = {
-		...data,
-		id: `cust_${String(mockCustomers.length + 1).padStart(3, "0")}`,
-		createdAt: new Date().toISOString().split("T")[0],
-	};
-	mockCustomers.unshift(newCustomer);
-	mockDashboardSummary.totalCustomers += 1;
-	return newCustomer;
-}
-
-export async function updateCustomer(
-	id: string,
-	data: Partial<Customer>,
-): Promise<Customer> {
-	await delay();
-	const idx = mockCustomers.findIndex((c) => c.id === id);
-	if (idx !== -1) {
-		mockCustomers[idx] = { ...mockCustomers[idx], ...data };
-		return mockCustomers[idx];
-	}
-	throw new Error("Customer not found");
-}
-
-export async function getCustomerSubscriptions(
-	customerId: string,
-): Promise<Subscription[]> {
-	await delay();
-	return mockSubscriptions.filter((s) => s.customerId === customerId);
-}
-
-export async function getCustomerInvoices(
-	customerId: string,
-): Promise<Invoice[]> {
-	await delay();
-	return mockInvoices.filter((i) => i.customerId === customerId);
-}
-
-// ---------- PRODUCTS & PLANS ----------
-
-export async function getProducts(
-	page = 1,
-	pageSize = 10,
-	search = "",
-	categoryFilter = "all",
-): Promise<PaginatedResponse<Product>> {
-	await delay();
-	let filtered = [...mockProducts];
-
-	if (search) {
-		const q = search.toLowerCase();
-		filtered = filtered.filter(
-			(p) =>
-				p.name.toLowerCase().includes(q) ||
-				p.description.toLowerCase().includes(q) ||
-				p.category.toLowerCase().includes(q),
-		);
-	}
-
-	if (categoryFilter !== "all") {
-		filtered = filtered.filter((p) => p.category === categoryFilter);
-	}
-
-	return paginate(filtered, page, pageSize);
-}
-
-export async function createProduct(
-	data: Omit<Product, "id" | "createdAt">,
-): Promise<Product> {
-	await delay();
-	const newProduct: Product = {
-		...data,
-		id: `prod_${String(mockProducts.length + 1).padStart(3, "0")}`,
-		createdAt: new Date().toISOString().split("T")[0],
-	};
-	mockProducts.unshift(newProduct);
-	return newProduct;
-}
-
-export async function updateProduct(
-	id: string,
-	data: Partial<Product>,
-): Promise<Product> {
-	await delay();
-	const idx = mockProducts.findIndex((p) => p.id === id);
-	if (idx !== -1) {
-		mockProducts[idx] = { ...mockProducts[idx], ...data };
-		return mockProducts[idx];
-	}
-	throw new Error("Product not found");
-}
-
-export async function toggleProductStatus(id: string): Promise<Product> {
-	await delay();
-	const prod = mockProducts.find((p) => p.id === id);
-	if (prod) {
-		prod.isActive = !prod.isActive;
-		return prod;
-	}
-	throw new Error("Product not found");
-}
-
-export async function getPlans(): Promise<SubscriptionPlan[]> {
-	await delay();
-	return mockPlans;
-}
-
-// ---------- SUBSCRIPTIONS ----------
-
-export async function getSubscriptions(
-	page = 1,
-	pageSize = 10,
-	search = "",
-	statusFilter = "all",
-): Promise<PaginatedResponse<Subscription>> {
-	await delay();
-	let filtered = [...mockSubscriptions];
-
-	if (search) {
-		const q = search.toLowerCase();
-		filtered = filtered.filter(
-			(s) =>
-				s.customerName.toLowerCase().includes(q) ||
-				s.planName.toLowerCase().includes(q),
-		);
-	}
-
-	if (statusFilter !== "all") {
-		filtered = filtered.filter((s) => s.status === statusFilter);
-	}
-
-	return paginate(filtered, page, pageSize);
-}
-
-export async function createSubscription(
-	data: Omit<Subscription, "id" | "createdAt">,
-): Promise<Subscription> {
-	await delay();
-	const newSub: Subscription = {
-		...data,
-		id: `sub_${String(mockSubscriptions.length + 1).padStart(3, "0")}`,
-		createdAt: new Date().toISOString().split("T")[0],
-	};
-	mockSubscriptions.unshift(newSub);
-	if (newSub.status === "active") {
-		mockDashboardSummary.activeSubscriptions += 1;
-	}
-	return newSub;
-}
-
-export async function updateSubscriptionStatus(
-	id: string,
-	newStatus: SubscriptionStatus,
-): Promise<Subscription> {
-	await delay();
-	const sub = mockSubscriptions.find((s) => s.id === id);
-	if (sub) {
-		const oldStatus = sub.status;
-		sub.status = newStatus;
-
-		if (oldStatus !== "active" && newStatus === "active") {
-			mockDashboardSummary.activeSubscriptions += 1;
-		} else if (oldStatus === "active" && newStatus !== "active") {
-			mockDashboardSummary.activeSubscriptions = Math.max(
-				0,
-				mockDashboardSummary.activeSubscriptions - 1,
+	// --- Customers API ---
+	async getCustomers(search?: string, status?: string): Promise<Customer[]> {
+		await delay();
+		let result = [...customersData];
+		if (search) {
+			const q = search.toLowerCase();
+			result = result.filter(
+				(c) =>
+					c.name.toLowerCase().includes(q) ||
+					c.email.toLowerCase().includes(q) ||
+					c.phone.includes(q),
 			);
 		}
-		return sub;
-	}
-	throw new Error("Subscription not found");
-}
+		if (status && status !== "all") {
+			result = result.filter((c) => c.status === status);
+		}
+		return result;
+	},
 
-// ---------- INVOICES ----------
+	async getCustomerById(id: string): Promise<Customer | undefined> {
+		await delay();
+		return customersData.find((c) => c.id === id);
+	},
 
-export async function getInvoices(
-	page = 1,
-	pageSize = 10,
-	search = "",
-): Promise<PaginatedResponse<Invoice>> {
-	await delay();
-	const filtered = search
-		? mockInvoices.filter((i) =>
-				i.invoiceNumber.toLowerCase().includes(search.toLowerCase()),
-			)
-		: mockInvoices;
-	return paginate(filtered, page, pageSize);
-}
+	async createCustomer(
+		customer: Omit<Customer, "id" | "createdAt" | "updatedAt">,
+	): Promise<Customer> {
+		await delay();
+		const newCustomer: Customer = {
+			...customer,
+			id: `cust_${Date.now()}`,
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+		};
+		customersData.unshift(newCustomer);
+		return newCustomer;
+	},
+
+	async updateCustomer(
+		id: string,
+		updates: Partial<Customer>,
+	): Promise<Customer> {
+		await delay();
+		const index = customersData.findIndex((c) => c.id === id);
+		if (index === -1) throw new Error("Customer not found");
+		customersData[index] = {
+			...customersData[index],
+			...updates,
+			updatedAt: new Date().toISOString(),
+		};
+		return customersData[index];
+	},
+
+	// --- Products API ---
+	async getProducts(category?: string): Promise<Product[]> {
+		await delay();
+		if (category && category !== "all") {
+			return productsData.filter((p) => p.category === category);
+		}
+		return [...productsData];
+	},
+
+	async createProduct(
+		product: Omit<Product, "id" | "createdAt" | "updatedAt">,
+	): Promise<Product> {
+		await delay();
+		const newProduct: Product = {
+			...product,
+			id: `prod_${Date.now()}`,
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+		};
+		productsData.unshift(newProduct);
+		return newProduct;
+	},
+
+	async updateProduct(
+		id: string,
+		updates: Partial<Product>,
+	): Promise<Product> {
+		await delay();
+		const index = productsData.findIndex((p) => p.id === id);
+		if (index === -1) throw new Error("Product not found");
+		productsData[index] = {
+			...productsData[index],
+			...updates,
+			updatedAt: new Date().toISOString(),
+		};
+		return productsData[index];
+	},
+
+	// --- Subscription Plans API ---
+	async getPlans(): Promise<SubscriptionPlan[]> {
+		await delay();
+		return [...plansData];
+	},
+
+	// --- Subscriptions API ---
+	async getSubscriptions(
+		status?: string,
+		customerId?: string,
+	): Promise<Subscription[]> {
+		await delay();
+		let result = [...subscriptionsData];
+		if (status && status !== "all") {
+			result = result.filter((s) => s.status === status);
+		}
+		if (customerId) {
+			result = result.filter((s) => s.customerId === customerId);
+		}
+		return result;
+	},
+
+	async createSubscription(subData: {
+		customerId: string;
+		planId: string;
+		startDate: string;
+		billingCycle: "monthly" | "yearly";
+	}): Promise<Subscription> {
+		await delay();
+		const customer = customersData.find((c) => c.id === subData.customerId);
+		const plan = plansData.find((p) => p.id === subData.planId);
+
+		const pricePaise =
+			subData.billingCycle === "yearly"
+				? (plan?.priceYearlyPaise ?? 0)
+				: (plan?.priceMonthlyPaise ?? 0);
+
+		const newSub: Subscription = {
+			id: `sub_${Date.now()}`,
+			subscriptionNumber: `SUB-${Math.floor(1000 + Math.random() * 9000)}`,
+			customerId: subData.customerId,
+			customerName: customer?.name ?? "Unknown Customer",
+			planId: subData.planId,
+			planName: plan?.name ?? "Unknown Plan",
+			status: "confirmed",
+			billingCycle: subData.billingCycle,
+			startDate: subData.startDate,
+			nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+				.toISOString()
+				.split("T")[0],
+			amountPaise: pricePaise,
+			currency: "INR",
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+		};
+		subscriptionsData.unshift(newSub);
+		return newSub;
+	},
+
+	async updateSubscriptionStatus(
+		id: string,
+		status: Subscription["status"],
+	): Promise<Subscription> {
+		await delay();
+		const index = subscriptionsData.findIndex((s) => s.id === id);
+		if (index === -1) throw new Error("Subscription not found");
+		subscriptionsData[index] = {
+			...subscriptionsData[index],
+			status,
+			updatedAt: new Date().toISOString(),
+		};
+		return subscriptionsData[index];
+	},
+
+	// --- Invoices API ---
+	async getInvoices(
+		status?: string,
+		customerId?: string,
+		search?: string,
+	): Promise<Invoice[]> {
+		await delay();
+		let result = [...invoicesData];
+		if (status && status !== "all") {
+			result = result.filter((i) => i.status === status);
+		}
+		if (customerId) {
+			result = result.filter((i) => i.customerId === customerId);
+		}
+		if (search) {
+			const q = search.toLowerCase();
+			result = result.filter(
+				(i) =>
+					i.invoiceNumber.toLowerCase().includes(q) ||
+					i.customerName.toLowerCase().includes(q),
+			);
+		}
+		return result;
+	},
+
+	async getInvoiceById(id: string): Promise<Invoice | undefined> {
+		await delay();
+		return invoicesData.find((i) => i.id === id);
+	},
+
+	async createInvoice(invoicePayload: {
+		customerId: string;
+		dueDate: string;
+		items: {
+			description: string;
+			quantity: number;
+			unitPricePaise: number;
+		}[];
+		taxPaise?: number;
+		discountPaise?: number;
+	}): Promise<Invoice> {
+		await delay();
+		const customer = customersData.find(
+			(c) => c.id === invoicePayload.customerId,
+		);
+
+		const subtotalPaise = invoicePayload.items.reduce(
+			(sum, item) => sum + item.quantity * item.unitPricePaise,
+			0,
+		);
+		const taxPaise =
+			invoicePayload.taxPaise ?? Math.round(subtotalPaise * 0.18);
+		const discountPaise = invoicePayload.discountPaise ?? 0;
+		const totalPaise = subtotalPaise + taxPaise - discountPaise;
+
+		const newInvoice: Invoice = {
+			id: `inv_${Date.now()}`,
+			invoiceNumber: `INV-2025-${Math.floor(100 + Math.random() * 900)}`,
+			customerId: invoicePayload.customerId,
+			customerName: customer?.name ?? "Client",
+			customerEmail: customer?.email ?? "",
+			status: "sent",
+			issueDate: new Date().toISOString().split("T")[0],
+			dueDate: invoicePayload.dueDate,
+			items: invoicePayload.items.map((item, idx) => ({
+				id: `li_${idx + 1}`,
+				description: item.description,
+				quantity: item.quantity,
+				unitPricePaise: item.unitPricePaise,
+				taxRatePercent: 18,
+				totalPaise: item.quantity * item.unitPricePaise,
+			})),
+			subtotalPaise,
+			taxPaise,
+			discountPaise,
+			totalPaise,
+			paidAmountPaise: 0,
+			balanceDuePaise: totalPaise,
+			currency: "INR",
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString(),
+		};
+
+		invoicesData.unshift(newInvoice);
+		return newInvoice;
+	},
+
+	async recordPayment(paymentData: {
+		invoiceId: string;
+		amountPaise: number;
+		paymentMethod: Payment["paymentMethod"];
+		referenceNumber: string;
+	}): Promise<{ invoice: Invoice; payment: Payment }> {
+		await delay();
+		const invoiceIndex = invoicesData.findIndex(
+			(i) => i.id === paymentData.invoiceId,
+		);
+		if (invoiceIndex === -1) throw new Error("Invoice not found");
+
+		const inv = invoicesData[invoiceIndex];
+		const newPaidAmount = inv.paidAmountPaise + paymentData.amountPaise;
+		const newBalanceDue = Math.max(0, inv.totalPaise - newPaidAmount);
+
+		let newStatus: Invoice["status"] = inv.status;
+		if (newBalanceDue === 0) {
+			newStatus = "paid";
+		} else if (newPaidAmount > 0) {
+			newStatus = "partially_paid";
+		}
+
+		const updatedInvoice: Invoice = {
+			...inv,
+			paidAmountPaise: newPaidAmount,
+			balanceDuePaise: newBalanceDue,
+			status: newStatus,
+			updatedAt: new Date().toISOString(),
+		};
+		invoicesData[invoiceIndex] = updatedInvoice;
+
+		const newPayment: Payment = {
+			id: `pay_${Date.now()}`,
+			invoiceId: inv.id,
+			invoiceNumber: inv.invoiceNumber,
+			customerId: inv.customerId,
+			customerName: inv.customerName,
+			amountPaise: paymentData.amountPaise,
+			paymentMethod: paymentData.paymentMethod,
+			referenceNumber: paymentData.referenceNumber,
+			status: "completed",
+			paymentDate: new Date().toISOString().split("T")[0],
+			createdAt: new Date().toISOString(),
+		};
+		paymentsData.unshift(newPayment);
+
+		return { invoice: updatedInvoice, payment: newPayment };
+	},
+
+	async getPaymentsByInvoiceId(invoiceId: string): Promise<Payment[]> {
+		await delay();
+		return paymentsData.filter((p) => p.invoiceId === invoiceId);
+	},
+};
