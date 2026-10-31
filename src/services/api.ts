@@ -134,14 +134,67 @@ export async function getProducts(
 	page = 1,
 	pageSize = 10,
 	search = "",
+	categoryFilter = "all",
 ): Promise<PaginatedResponse<Product>> {
 	await delay();
-	const filtered = search
-		? mockProducts.filter((p) =>
-				p.name.toLowerCase().includes(search.toLowerCase()),
-			)
-		: mockProducts;
+	let filtered = [...mockProducts];
+
+	if (search) {
+		const q = search.toLowerCase();
+		filtered = filtered.filter(
+			(p) =>
+				p.name.toLowerCase().includes(q) ||
+				p.description.toLowerCase().includes(q) ||
+				p.category.toLowerCase().includes(q),
+		);
+	}
+
+	if (categoryFilter !== "all") {
+		filtered = filtered.filter((p) => p.category === categoryFilter);
+	}
+
 	return paginate(filtered, page, pageSize);
+}
+
+export async function getProductById(id: string): Promise<Product | undefined> {
+	await delay();
+	return mockProducts.find((p) => p.id === id);
+}
+
+export async function createProduct(
+	data: Omit<Product, "id" | "createdAt">,
+): Promise<Product> {
+	await delay();
+	const newProduct: Product = {
+		...data,
+		id: `prod_${String(mockProducts.length + 1).padStart(3, "0")}`,
+		createdAt: new Date().toISOString().split("T")[0],
+	};
+	mockProducts.unshift(newProduct);
+	return newProduct;
+}
+
+export async function updateProduct(
+	id: string,
+	data: Partial<Product>,
+): Promise<Product> {
+	await delay();
+	const idx = mockProducts.findIndex((p) => p.id === id);
+	if (idx !== -1) {
+		mockProducts[idx] = { ...mockProducts[idx], ...data };
+		return mockProducts[idx];
+	}
+	throw new Error("Product not found");
+}
+
+export async function toggleProductStatus(id: string): Promise<Product> {
+	await delay();
+	const prod = mockProducts.find((p) => p.id === id);
+	if (prod) {
+		prod.isActive = !prod.isActive;
+		return prod;
+	}
+	throw new Error("Product not found");
 }
 
 // ---------- SUBSCRIPTIONS ----------
