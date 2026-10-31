@@ -1,0 +1,27 @@
+{
+  "name": "brightloop-billing-server",
+  "version": "1.0.0",
+  "description": "Backend billing engine and subscription management for Brightloop Software",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "@prisma/adapter-neon": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "prisma": "^7.10.1"
+  }
+}

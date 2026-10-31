@@ -1,0 +1,13 @@
+node_modules/
+.env
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+dist/
+build/
+src/generated/
+.DS_Store
+
