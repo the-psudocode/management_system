@@ -16,9 +16,9 @@ import {
 	CartesianGrid,
 	Tooltip,
 } from "recharts";
-import type { DashboardSummary, DashboardAnalytics } from "../types";
-import { getDashboardSummary, getDashboardAnalytics } from "../services/api";
-import { formatCurrency } from "../utils/format";
+import type { DashboardSummary, DashboardAnalytics } from "../../types";
+import { getDashboardSummary, getDashboardAnalytics } from "../../services/api";
+import { formatCurrency } from "../../utils/format";
 
 export const Dashboard: React.FC = () => {
 	const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -57,12 +57,11 @@ export const Dashboard: React.FC = () => {
 	}));
 
 	return (
-		<div className="p-6 max-w-7xl mx-auto space-y-6">
+		<div className="space-y-6">
 			<div>
 				<h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
 				<p className="text-sm text-slate-500">
-					Overview of key revenue metrics, subscriptions, and
-					outstanding payments.
+					Overview of key revenue metrics, subscriptions, and outstanding payments.
 				</p>
 			</div>
 
@@ -84,9 +83,7 @@ export const Dashboard: React.FC = () => {
 					<div className="mt-3 flex items-center text-xs text-emerald-600">
 						<ArrowUpRight className="w-4 h-4 mr-0.5" />
 						<span className="font-semibold">+12.4%</span>
-						<span className="text-slate-400 ml-1">
-							from last month
-						</span>
+						<span className="text-slate-400 ml-1">from last month</span>
 					</div>
 				</div>
 
@@ -143,8 +140,7 @@ export const Dashboard: React.FC = () => {
 						</div>
 					</div>
 					<div className="mt-3 text-xs text-rose-600 font-medium">
-						{summary.overdueInvoices} overdue invoices require
-						attention
+						{summary.overdueInvoices} overdue invoices require attention
 					</div>
 				</div>
 			</div>
@@ -305,3 +301,5 @@ export const Dashboard: React.FC = () => {
 		</div>
 	);
 };
+
+export default Dashboard;

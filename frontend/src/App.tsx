@@ -1,61 +1,63 @@
-import { useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import MainLayout from "./components/layout/mainlayout";
+import Dashboard from "./pages/dashboard/Dashboard";
+import LoginPage from "./pages/auth/LoginPage";
+import PlaceholderPage from "./components/common/PlaceholderPage";
 import "./App.css";
 
 function App() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    alert("Demo login successful! Authentication will be integrated later.");
-  };
-
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <div className="logo">
-          <span>✦</span> Brightloop
-        </div>
+    <BrowserRouter>
+      <Routes>
+        {/* Public auth route */}
+        <Route path="/login" element={<LoginPage />} />
 
-        <h1>Welcome back!</h1>
-        <p className="subtitle">Sign in to your Brightloop Billing account.</p>
-
-        <form onSubmit={handleLogin}>
-          <label>Email Address</label>
-          <input
-            type="email"
-            placeholder="admin@brightloop.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+        {/* Protected app routes inside shared layout */}
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route
+            path="customers"
+            element={
+              <PlaceholderPage
+                title="Customers"
+                description="Manage your customer accounts, GSTIN details, and contact directory."
+              />
+            }
           />
-
-          <label>Password</label>
-          <input
-            type="password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+          <Route
+            path="products"
+            element={
+              <PlaceholderPage
+                title="Products"
+                description="Manage your product catalog, pricing tiers, and plan variants."
+              />
+            }
           />
+          <Route
+            path="subscriptions"
+            element={
+              <PlaceholderPage
+                title="Subscriptions"
+                description="Track, create, pause, and renew recurring customer subscriptions."
+              />
+            }
+          />
+          <Route
+            path="invoices"
+            element={
+              <PlaceholderPage
+                title="Invoices"
+                description="Generate, review, and track invoices, tax calculations, and payment status."
+              />
+            }
+          />
+        </Route>
 
-          <div className="login-options">
-            <label className="remember">
-              <input type="checkbox" /> Remember me
-            </label>
-            <a href="#" onClick={(e) => e.preventDefault()}>
-              Forgot password?
-            </a>
-          </div>
-
-          <button type="submit">Sign In →</button>
-        </form>
-
-        <p className="footer">
-          © 2026 Brightloop Software. All rights reserved.
-        </p>
-      </div>
-    </div>
+        {/* Fallback route */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
