@@ -11,16 +11,24 @@ export type SubscriptionStatus =
 	| "paused"
 	| "closed";
 
-export type InvoiceStatus = "draft" | "confirmed" | "paid" | "overdue";
+export type InvoiceStatus =
+	| "draft"
+	| "sent"
+	| "confirmed"
+	| "partially_paid"
+	| "paid"
+	| "overdue"
+	| "void";
 
 export type UserRole = "admin" | "staff" | "customer";
 
-export type BillingInterval = "monthly" | "quarterly" | "yearly";
+export type BillingInterval = "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
 
 export type DiscountType = "fixed" | "percentage";
 
 export interface Customer {
 	id: string;
+	userId?: string;
 	name: string;
 	email: string;
 	phone: string;
@@ -31,7 +39,10 @@ export interface Customer {
 	pincode: string;
 	gstin: string;
 	createdAt: string;
+	updatedAt?: string;
 	status: "active" | "inactive";
+	accountBalancePaise?: number | string | null;
+	creditLimitPaise?: number | string | null;
 }
 
 export interface ProductVariant {
@@ -39,6 +50,7 @@ export interface ProductVariant {
 	name: string;
 	sku: string;
 	priceInPaise: number;
+	pricePaise?: number | string;
 	isActive: boolean;
 }
 
@@ -47,30 +59,42 @@ export interface Product {
 	name: string;
 	description: string;
 	category: string;
+	type?: string;
 	basePriceInPaise: number;
+	salesPricePaise?: number | string;
+	costPricePaise?: number | string;
 	variants: ProductVariant[];
+	status?: string;
 	isActive: boolean;
 	createdAt: string;
+	updatedAt?: string;
 }
 
 export interface SubscriptionPlan {
 	id: string;
 	name: string;
-	description: string;
+	description?: string;
 	productId: string;
-	productName: string;
+	productName?: string;
 	variantId?: string;
 	variantName?: string;
 	priceInPaise: number;
+	amountPaise?: number | string;
+	priceMonthlyPaise?: number;
+	priceYearlyPaise?: number;
 	billingInterval: BillingInterval;
-	trialDays: number;
+	trialDays?: number;
 	isActive: boolean;
+	status?: string;
 }
 
 export interface Subscription {
 	id: string;
+	subscriptionNumber?: string;
+	number?: string;
 	customerId: string;
 	customerName: string;
+	customer?: any;
 	planId: string;
 	planName: string;
 	status: SubscriptionStatus;
@@ -79,7 +103,10 @@ export interface Subscription {
 	nextBillingDate: string | null;
 	billingInterval: BillingInterval;
 	amountInPaise: number;
+	amountPaise?: number;
+	items?: any[];
 	createdAt: string;
+	updatedAt?: string;
 }
 
 export interface TaxRule {
@@ -108,40 +135,72 @@ export interface InvoiceLineItem {
 	id: string;
 	description: string;
 	quantity: number;
-	unitPriceInPaise: number;
-	taxInPaise: number;
-	discountInPaise: number;
-	totalInPaise: number;
+	unitPriceInPaise?: number;
+	unitPricePaise?: number;
+	taxInPaise?: number;
+	taxPaise?: number;
+	discountInPaise?: number;
+	discountPaise?: number;
+	totalInPaise?: number;
+	totalPaise?: number;
+	unitPriceRupees?: string;
 }
 
 export interface Invoice {
 	id: string;
 	invoiceNumber: string;
+	number?: string;
 	customerId: string;
 	customerName: string;
+	customerEmail?: string;
+	customer?: any;
 	subscriptionId: string;
+	subscription?: any;
 	status: InvoiceStatus;
-	lineItems: InvoiceLineItem[];
+	lineItems?: InvoiceLineItem[];
+	items?: any[];
 	subtotalInPaise: number;
+	subtotalPaise: number;
 	taxInPaise: number;
+	taxPaise: number;
 	discountInPaise: number;
+	discountPaise: number;
 	totalInPaise: number;
+	totalPaise: number;
 	amountPaidInPaise: number;
+	paidAmountPaise: number;
+	amountPaidPaise?: number;
 	outstandingInPaise: number;
+	balanceDuePaise: number;
 	billingPeriodStart: string;
 	billingPeriodEnd: string;
 	dueDate: string;
+	issueDate?: string;
+	issuedAt?: string | null;
+	allocations?: any[];
 	createdAt: string;
+	updatedAt?: string;
 }
 
 export interface Payment {
 	id: string;
-	invoiceId: string;
-	amountInPaise: number;
-	method: "upi" | "bank_transfer" | "card" | "cash" | "cheque";
-	reference: string;
-	date: string;
-	notes: string;
+	invoiceId?: string;
+	invoiceNumber?: string;
+	customerId?: string;
+	customer?: any;
+	amountInPaise?: number;
+	amountPaise: number;
+	paymentMethod: "upi" | "bank_transfer" | "card" | "cash" | "cheque" | "other" | string;
+	method?: "upi" | "bank_transfer" | "card" | "cash" | "cheque" | "other" | string;
+	reference?: string;
+	referenceNumber?: string;
+	date?: string;
+	paymentDate?: string;
+	receivedAt?: string;
+	notes?: string;
+	currency?: string;
+	allocations?: any[];
+	createdAt?: string;
 }
 
 export interface DashboardSummary {

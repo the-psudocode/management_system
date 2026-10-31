@@ -1,4 +1,6 @@
-import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
+import fs from 'node:fs';
+import path from 'node:path';
+import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import prisma from '../database/index.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -13,8 +15,22 @@ function firebaseAuthClient() {
     throw new ApiError(503, 'Firebase authentication is not configured.');
   }
 
+  let credential;
+  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+  if (serviceAccountPath) {
+    const resolvedPath = path.resolve(process.cwd(), serviceAccountPath);
+    if (fs.existsSync(resolvedPath)) {
+      const serviceAccount = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+      credential = cert(serviceAccount);
+    }
+  }
+
+  if (!credential) {
+    credential = applicationDefault();
+  }
+
   const app = getApps()[0] || initializeApp({
-    credential: applicationDefault(),
+    credential,
     projectId,
   });
   authInstance = getAuth(app);
@@ -28,10 +44,23 @@ export async function requireFirebaseUser(req, res, next) {
 
   try {
     const decoded = await firebaseAuthClient().verifyIdToken(match[1], true);
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { firebaseUid: decoded.uid },
       select: { id: true, firebaseUid: true, email: true, name: true, role: true, status: true },
     });
+
+    if (!user && decoded.email) {
+      user = await prisma.user.findFirst({
+        where: { email: decoded.email },
+        select: { id: true, firebaseUid: true, email: true, name: true, role: true, status: true },
+      });
+      if (user) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { firebaseUid: decoded.uid },
+        });
+      }
+    }
 
     if (!user || user.status !== 'active') {
       return next(ApiError.forbidden('This account is not active in Brightloop Billing.'));

@@ -8,12 +8,8 @@ import {
 	Play,
 	Pause,
 	StopCircle,
-	Calendar,
-	CheckCircle,
-	ChevronLeft,
+		ChevronLeft,
 	ChevronRight,
-	User,
-	CreditCard,
 } from "lucide-react";
 import type {
 	Subscription,
