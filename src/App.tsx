@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import { Dashboard } from "./pages/Dashboard";
 import { Customers } from "./pages/Customers";
 import { Products } from "./pages/Products";
-import { LayoutDashboard, Users, Package } from "lucide-react";
+import { Subscriptions } from "./pages/Subscriptions";
+import { LayoutDashboard, Users, Package, Repeat } from "lucide-react";
 
 export function App() {
 	const [activeTab, setActiveTab] = useState<
-		"dashboard" | "customers" | "products"
+		"dashboard" | "customers" | "products" | "subscriptions"
 	>("dashboard");
 
 	return (
@@ -57,6 +58,16 @@ export function App() {
 							>
 								<Package className="w-3.5 h-3.5" /> Products
 							</button>
+							<button
+								onClick={() => setActiveTab("subscriptions")}
+								className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
+									activeTab === "subscriptions"
+										? "bg-white text-indigo-600 shadow-xs"
+										: "text-slate-600 hover:text-slate-900"
+								}`}
+							>
+								<Repeat className="w-3.5 h-3.5" /> Subscriptions
+							</button>
 						</div>
 					</div>
 
@@ -71,6 +82,7 @@ export function App() {
 				{activeTab === "dashboard" && <Dashboard />}
 				{activeTab === "customers" && <Customers />}
 				{activeTab === "products" && <Products />}
+				{activeTab === "subscriptions" && <Subscriptions />}
 			</main>
 		</div>
 	);
