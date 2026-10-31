@@ -6,17 +6,19 @@ export function asDateOnly(value) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-function addMonthsClamped(date, months) {
+export function addMonthsClamped(date, months, anchorDay = null) {
+  const targetAnchorDay = anchorDay ?? date.getUTCDate();
   const monthIndex = date.getUTCMonth() + months;
   const year = date.getUTCFullYear() + Math.floor(monthIndex / 12);
   const month = ((monthIndex % 12) + 12) % 12;
-  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(year, month, Math.min(date.getUTCDate(), lastDay)));
+  const lastDayOfTargetMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(targetAnchorDay, lastDayOfTargetMonth)));
 }
 
-export function addBillingInterval(value, interval, count = 1) {
+export function addBillingInterval(value, interval, count = 1, anchorDay = null) {
   const date = asDateOnly(value);
   const amount = Math.max(1, Number(count) || 1);
+  const effectiveAnchorDay = anchorDay ?? date.getUTCDate();
   switch (String(interval).toLowerCase()) {
     case 'daily':
     case 'day':
@@ -27,13 +29,13 @@ export function addBillingInterval(value, interval, count = 1) {
       date.setUTCDate(date.getUTCDate() + amount * 7);
       return date;
     case 'quarterly':
-      return addMonthsClamped(date, amount * 3);
+      return addMonthsClamped(date, amount * 3, effectiveAnchorDay);
     case 'monthly':
     case 'month':
-      return addMonthsClamped(date, amount);
+      return addMonthsClamped(date, amount, effectiveAnchorDay);
     case 'yearly':
     case 'year':
-      return addMonthsClamped(date, amount * 12);
+      return addMonthsClamped(date, amount * 12, effectiveAnchorDay);
     default:
       throw ApiError.unprocessableEntity(`Unsupported billing interval: ${interval}`);
   }

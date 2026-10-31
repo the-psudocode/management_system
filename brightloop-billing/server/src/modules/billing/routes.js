@@ -18,7 +18,8 @@ const dueSubscriptionInclude = {
 
 function periodFor(subscription) {
   const start = asDateOnly(subscription.nextBillingDate);
-  const next = addBillingInterval(start, subscription.billingInterval, subscription.intervalCount);
+  const anchorDay = subscription.startDate ? asDateOnly(subscription.startDate).getUTCDate() : start.getUTCDate();
+  const next = addBillingInterval(start, subscription.billingInterval, subscription.intervalCount, anchorDay);
   const end = new Date(next);
   end.setUTCDate(end.getUTCDate() - 1);
   return { start, end, next };
