@@ -5,6 +5,14 @@ import { checkDatabaseHealth } from './database/index.js';
 import { notFound, errorHandler } from './middleware/index.js';
 import { ApiError } from './utils/ApiError.js';
 import { sendSuccess } from './utils/response.js';
+import catalogRoutes from './modules/catalog/routes.js';
+import { requireFirebaseUser } from './middleware/firebaseAuth.js';
+import subscriptionRoutes from './modules/subscriptions/routes.js';
+import billingRoutes from './modules/billing/routes.js';
+import paymentRoutes from './modules/payments/routes.js';
+import ruleRoutes from './modules/rules/routes.js';
+import analyticsRoutes from './modules/analytics/routes.js';
+import quotationRoutes from './modules/quotations/routes.js';
 
 export const createApp = () => {
   const app = express();
@@ -35,6 +43,11 @@ export const createApp = () => {
   app.use(cors(corsOptions));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+
+  const api = express.Router();
+  api.use(requireFirebaseUser);
+  api.use(catalogRoutes, billingRoutes, paymentRoutes, ruleRoutes, analyticsRoutes, quotationRoutes, subscriptionRoutes);
+  app.use('/api/v1', api);
 
   // Root endpoint
   app.get('/', (req, res) => {

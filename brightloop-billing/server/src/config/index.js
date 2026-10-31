@@ -24,6 +24,7 @@ export const config = {
   port: parseInt(process.env.PORT || '5000', 10),
   databaseUrl: process.env.DATABASE_URL || '',
   databaseUrlUnpooled: process.env.DATABASE_URL_UNPOOLED || '',
+  firebaseProjectId: process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || '',
   corsOrigins: parseCorsOrigins(process.env.CORS_ORIGINS || process.env.CORS_ORIGIN)
 };
 
