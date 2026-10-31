@@ -82,9 +82,11 @@ After configuring the backend environment variables and generating the Prisma cl
 npm run seed:demo
 ```
 
-The seed adds the Brightloop Billing Suite, Cloud Storage Vault, and Priority Customer Support with sample INR monthly or annual plans. It is additive and idempotent: existing entries are skipped, never updated or deleted. It does not create fake subscriptions, invoices, or payments.
+The seed adds Brightloop Web Development, Cloud Hosting, Business Email, Cybersecurity Monitoring, Database Management, and Software Maintenance with sample INR plans. It is additive and idempotent: existing entries are skipped, never updated or deleted. It does not create fake subscriptions, invoices, or payments.
 
-Customers can sign in, choose **Browse plans**, and request a plan. The request creates a draft subscription linked to the signed-in customer's own profile. Admin or staff must review and advance it through the existing lifecycle before invoices are generated.
+Customers can sign in, choose **Browse plans**, and request a plan. The request creates a draft subscription linked to the signed-in customer's own profile. Admin or staff must review and advance it through the existing lifecycle before invoices are generated. If the plans endpoint has no reachable catalog, the portal displays clearly labeled local preview data with purchasing disabled; this preview is not database data.
+
+Authentication uses Firebase email/password. Public sign-up creates customer accounts only; database roles control redirection and authorization. Existing admin/staff/demo customer access requires Firebase accounts provisioned in the configured Firebase project and corresponding active database records. The quick-fill buttons only fill email addresses and never provide passwords or bypass authentication.
 
 ### 4. Environment & Configuration
 

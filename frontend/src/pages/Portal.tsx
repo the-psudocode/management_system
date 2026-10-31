@@ -7,6 +7,17 @@ import { formatCurrency, formatDate } from "../utils/format";
 
 type PortalProps = { catalogOnly?: boolean };
 
+const offlineDemoPlans: SubscriptionPlan[] = [
+	{ id: "demo-web-starter", name: "Starter", description: "Responsive business website, hosting setup, and up to 2 content updates each month.", productId: "demo-web", productName: "Brightloop Web Development", productDescription: "Managed website development and continuous improvement.", priceInPaise: 499900, amountPaise: 499900, billingInterval: "monthly", minimumQuantity: 1, trialDays: 0, isActive: true, status: "active" },
+	{ id: "demo-web-pro", name: "Professional", description: "Custom website, analytics integration, priority updates, and monthly performance review.", productId: "demo-web", productName: "Brightloop Web Development", productDescription: "Managed website development and continuous improvement.", priceInPaise: 999900, amountPaise: 999900, billingInterval: "monthly", minimumQuantity: 1, trialDays: 0, isActive: true, status: "active" },
+	{ id: "demo-cloud-basic", name: "Basic", description: "Single site, SSL, daily backups, and uptime monitoring.", productId: "demo-cloud", productName: "Brightloop Cloud Hosting", productDescription: "Managed hosting with SSL, automated backups, and scalable resources.", priceInPaise: 49900, amountPaise: 49900, billingInterval: "monthly", minimumQuantity: 1, trialDays: 0, isActive: true, status: "active" },
+	{ id: "demo-cloud-business", name: "Business", description: "Multiple sites, expanded resources, priority support, and hourly backups.", productId: "demo-cloud", productName: "Brightloop Cloud Hosting", productDescription: "Managed hosting with SSL, automated backups, and scalable resources.", priceInPaise: 149900, amountPaise: 149900, billingInterval: "monthly", minimumQuantity: 1, trialDays: 0, isActive: true, status: "active" },
+	{ id: "demo-email-standard", name: "Standard", description: "One business mailbox, custom domain, spam filtering, and calendar sync.", productId: "demo-email", productName: "Brightloop Business Email", productDescription: "Business email hosting for your custom domain.", priceInPaise: 19900, amountPaise: 19900, billingInterval: "monthly", minimumQuantity: 1, trialDays: 0, isActive: true, status: "active" },
+	{ id: "demo-security-essential", name: "Essential", description: "Continuous monitoring, vulnerability scans, incident alerts, and monthly report.", productId: "demo-security", productName: "Brightloop Cybersecurity Monitoring", productDescription: "Continuous monitoring and practical security alerts.", priceInPaise: 299900, amountPaise: 299900, billingInterval: "monthly", minimumQuantity: 1, trialDays: 0, isActive: true, status: "active" },
+	{ id: "demo-database-standard", name: "Standard", description: "Daily backups, health monitoring, performance checks, and recovery assistance.", productId: "demo-database", productName: "Brightloop Database Management", productDescription: "Managed database care and recovery planning.", priceInPaise: 199900, amountPaise: 199900, billingInterval: "monthly", minimumQuantity: 1, trialDays: 0, isActive: true, status: "active" },
+	{ id: "demo-maintenance-premium", name: "Premium", description: "Security updates, monthly maintenance, issue triage, and priority support.", productId: "demo-maintenance", productName: "Brightloop Software Maintenance", productDescription: "Keep business software secure and reliable.", priceInPaise: 399900, amountPaise: 399900, billingInterval: "monthly", minimumQuantity: 1, trialDays: 0, isActive: true, status: "active" },
+];
+
 function intervalLabel(interval: string, count = 1) {
 	const labels: Record<string, string> = { daily: "day", weekly: "week", monthly: "month", quarterly: "quarter", yearly: "year" };
 	const unit = labels[interval] || interval;
@@ -19,6 +30,7 @@ export function Portal({ catalogOnly = false }: PortalProps) {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
 	const [catalogError, setCatalogError] = useState("");
+	const [catalogIsDemo, setCatalogIsDemo] = useState(false);
 	const [notice, setNotice] = useState("");
 	const [workingPlanId, setWorkingPlanId] = useState<string | null>(null);
 
@@ -29,8 +41,15 @@ export function Portal({ catalogOnly = false }: PortalProps) {
 		const [overviewResult, plansResult] = await Promise.allSettled([getPortalOverview(), getPlans()]);
 		if (overviewResult.status === "fulfilled") setOverview(overviewResult.value);
 		else setError(overviewResult.reason instanceof Error ? overviewResult.reason.message : "Could not load your account.");
-		if (plansResult.status === "fulfilled") setPlans(plansResult.value);
-		else setCatalogError(plansResult.reason instanceof Error ? plansResult.reason.message : "Could not load available plans.");
+		if (plansResult.status === "fulfilled" && plansResult.value.length > 0) {
+			setPlans(plansResult.value);
+			setCatalogIsDemo(false);
+		} else {
+			setPlans(offlineDemoPlans);
+			setCatalogIsDemo(true);
+			if (plansResult.status === "rejected") setCatalogError("Showing a local demo catalog preview. These sample plans are not stored in the database; connect the backend and seed its catalog to enable requests.");
+			else setCatalogError("Showing a local demo catalog preview. Seed the database catalog to enable subscription requests.");
+		}
 		setLoading(false);
 	}
 
@@ -48,7 +67,7 @@ export function Portal({ catalogOnly = false }: PortalProps) {
 	}
 
 	async function handlePlanRequest(plan: SubscriptionPlan) {
-		if (!overview) return;
+		if (!overview || catalogIsDemo) return;
 		setWorkingPlanId(plan.id);
 		setError("");
 		setNotice("");
@@ -87,8 +106,8 @@ export function Portal({ catalogOnly = false }: PortalProps) {
 				<p className="mt-1 min-h-10 text-xs leading-5 text-stone-500">{plan.description || plan.productDescription || "Subscription service from Brightloop."}</p>
 				<div className="mt-4 flex items-baseline gap-1"><span className="text-2xl font-extrabold tracking-tight text-stone-900">{formatCurrency(Number(plan.priceInPaise))}</span><span className="text-xs text-stone-500">{intervalLabel(plan.billingInterval)}</span></div>
 				{(plan.minimumQuantity || 1) > 1 && <p className="mt-2 text-[11px] text-stone-500">Minimum quantity: {plan.minimumQuantity}</p>}
-				<button type="button" disabled={requested || workingPlanId !== null} onClick={() => void handlePlanRequest(plan)} className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${requested ? "border border-[#dce5d8] bg-[#f4f7f1] text-[#526d4f]" : "bg-[#263b2d] text-white hover:bg-[#344d39]"}`}>
-					{requested ? <><Check size={14} /> Request sent</> : workingPlanId === plan.id ? "Sending request…" : <>Request this plan <ArrowRight size={14} /></>}
+				<button type="button" disabled={catalogIsDemo || requested || workingPlanId !== null} onClick={() => void handlePlanRequest(plan)} className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${requested ? "border border-[#dce5d8] bg-[#f4f7f1] text-[#526d4f]" : "bg-[#263b2d] text-white hover:bg-[#344d39]"}`}>
+					{catalogIsDemo ? "Demo preview only" : requested ? <><Check size={14} /> Request sent</> : workingPlanId === plan.id ? "Sending request…" : <>Request this plan <ArrowRight size={14} /> </>}
 				</button>
 			</article>;
 		})}</div> : !catalogError && <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-8 text-center"><span className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-[#edf1e9] text-[#526d4f]"><Layers3 size={19} /></span><h3 className="mt-3 text-sm font-bold text-stone-800">No plans are published yet</h3><p className="mt-1 text-xs text-stone-500">The Brightloop team is preparing the catalog. Check back soon.</p></div>}

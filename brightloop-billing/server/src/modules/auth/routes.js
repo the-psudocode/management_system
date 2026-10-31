@@ -1,162 +1,58 @@
-// brightloop-billing/server/src/modules/auth/routes.js
 import express from 'express';
-import crypto from 'node:crypto';
+import { z } from 'zod';
 import prisma from '../../database/index.js';
+import { verifyFirebaseIdToken } from '../../middleware/firebaseAuth.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/response.js';
-import { signToken } from '../../utils/token.js';
 
 const router = express.Router();
 
-const DEMO_ACCOUNTS = {
-  'admin@brightloop.io': { name: 'Brightloop Admin', role: 'admin' },
-  'staff.operations@brightloop.io': { name: 'Operations Staff', role: 'staff' },
-  'customer1@acme.corp': { name: 'Acme Corp Customer', role: 'customer', company: 'Acme Corporation' },
-};
-
-router.post('/auth/login', async (req, res, next) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      throw ApiError.badRequest('Email and password are required.');
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-
-    let user = await prisma.user.findFirst({
-      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
-      select: { id: true, email: true, name: true, role: true, status: true, firebaseUid: true },
-    });
-
-    // Auto-provision demo accounts if not in database
-    if (!user && DEMO_ACCOUNTS[normalizedEmail]) {
-      const demo = DEMO_ACCOUNTS[normalizedEmail];
-      user = await prisma.user.create({
-        data: {
-          email: normalizedEmail,
-          name: demo.name,
-          role: demo.role,
-          status: 'active',
-          firebaseUid: `demo_${crypto.randomUUID()}`,
-        },
-        select: { id: true, email: true, name: true, role: true, status: true, firebaseUid: true },
-      });
-
-      if (demo.role === 'customer') {
-        await prisma.customer.create({
-          data: {
-            userId: user.id,
-            companyName: demo.company || demo.name,
-            accountBalancePaise: 0n,
-            creditLimitPaise: 50000000n,
-          },
-        });
-      }
-    }
-
-    if (!user) {
-      throw ApiError.unauthorized('Invalid email or password.');
-    }
-
-    if (user.status !== 'active') {
-      throw ApiError.forbidden('This account has been deactivated. Please contact support.');
-    }
-
-    const token = signToken({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    });
-
-    return sendSuccess(res, {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      },
-    }, 'Login successful');
-  } catch (err) {
-    return next(err);
-  }
-});
-
 router.post('/auth/signup', async (req, res, next) => {
   try {
-    const { email, password, name, role = 'customer', companyName, phone } = req.body;
+    const input = z.object({
+      name: z.string().trim().min(1).max(200),
+      companyName: z.string().trim().max(200).optional(),
+      phone: z.string().trim().max(60).optional(),
+    }).parse(req.body);
+    const token = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')?.[1];
+    if (!token) throw ApiError.unauthorized('A Firebase ID token is required to create your Brightloop profile.');
 
-    if (!email || !password || !name) {
-      throw ApiError.badRequest('Name, email, and password are required.');
-    }
+    const decoded = await verifyFirebaseIdToken(token);
+    const email = decoded.email?.trim().toLowerCase();
+    if (!email) throw ApiError.forbidden('A Firebase account email is required.');
 
-    if (password.length < 6) {
-      throw ApiError.badRequest('Password must be at least 6 characters long.');
-    }
+    const user = await prisma.$transaction(async (tx) => {
+      let record = await tx.user.findUnique({ where: { firebaseUid: decoded.uid } });
+      if (!record) {
+        const existingEmail = await tx.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } });
+        if (existingEmail) {
+          if (!decoded.email_verified) throw ApiError.forbidden('Verify your Firebase email before linking this existing Brightloop account.');
+          if (existingEmail.status.toLowerCase() !== 'active') throw ApiError.forbidden('This account is not active in Brightloop Billing.');
+          record = await tx.user.update({ where: { id: existingEmail.id }, data: { firebaseUid: decoded.uid } });
+        } else {
+          record = await tx.user.create({
+            data: { firebaseUid: decoded.uid, email, name: input.name, role: 'customer', status: 'active' },
+          });
+        }
+      }
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const assignedRole = ['admin', 'staff', 'customer'].includes(role) ? role : 'customer';
-
-    const existing = await prisma.user.findFirst({
-      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      if (record.email.toLowerCase() !== email) throw ApiError.forbidden('The Firebase email does not match the Brightloop account.');
+      if (record.status.toLowerCase() !== 'active') throw ApiError.forbidden('This account is not active in Brightloop Billing.');
+      if (record.role.toLowerCase() === 'customer') {
+        await tx.customer.upsert({
+          where: { userId: record.id },
+          create: { userId: record.id, companyName: input.companyName || input.name, phone: input.phone || null },
+          update: {},
+        });
+      }
+      return { id: record.id, name: record.name, email: record.email, role: record.role };
     });
 
-    if (existing) {
-      throw ApiError.conflict('An account with this email already exists. Please sign in instead.');
-    }
-
-    const user = await prisma.user.create({
-      data: {
-        email: normalizedEmail,
-        name: name.trim(),
-        role: assignedRole,
-        status: 'active',
-        firebaseUid: `native_${crypto.randomUUID()}`,
-      },
-      select: { id: true, email: true, name: true, role: true, status: true },
-    });
-
-    // If role is customer, create corresponding customer profile
-    if (assignedRole === 'customer' || companyName) {
-      await prisma.customer.create({
-        data: {
-          userId: user.id,
-          companyName: (companyName || name).trim(),
-          phone: phone ? phone.trim() : null,
-          accountBalancePaise: 0n,
-          creditLimitPaise: 10000000n, // 100,000 INR default credit limit
-        },
-      });
-    }
-
-    const token = signToken({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: 'Account created successfully',
-      data: {
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        },
-      },
-    });
-  } catch (err) {
-    return next(err);
+    return sendSuccess(res, user, 'Brightloop profile ready.', 201);
+  } catch (error) {
+    if (error?.code?.startsWith?.('auth/')) return next(ApiError.unauthorized('The Firebase ID token is invalid or expired.'));
+    return next(error);
   }
-});
-
-router.get('/auth/me', (req, res) => {
-  return sendSuccess(res, { user: req.user }, 'Current user profile');
 });
 
 export default router;

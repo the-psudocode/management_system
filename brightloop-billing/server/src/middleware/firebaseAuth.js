@@ -45,7 +45,7 @@ export async function verifyFirebaseIdToken(token) {
 
 export async function requireFirebaseUser(req, res, next) {
   // Allow public endpoints through
-  if (req.path === '/auth/login' || req.path === '/auth/signup' || req.path === '/health') {
+  if (req.path === '/auth/signup' || req.path === '/health') {
     return next();
   }
 
@@ -90,6 +90,9 @@ export async function requireFirebaseUser(req, res, next) {
     });
 
     if (!user && decoded.email) {
+      if (!decoded.email_verified) {
+        return next(ApiError.forbidden('Verify the Firebase email before linking it to a Brightloop account.'));
+      }
       user = await prisma.user.findFirst({
         where: { email: { equals: decoded.email.trim(), mode: 'insensitive' } },
         select: { id: true, firebaseUid: true, email: true, name: true, role: true, status: true },
