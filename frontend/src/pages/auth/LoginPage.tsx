@@ -5,12 +5,11 @@ import {
 	ArrowRight,
 	Building2,
 	CheckCircle2,
-	CircleDollarSign,
+	Infinity,
 	Lock,
 	Mail,
 	Phone,
 	ShieldCheck,
-	UserCheck,
 	UserRound,
 } from "lucide-react";
 import { apiService } from "../../services/api";
@@ -18,24 +17,25 @@ import { apiService } from "../../services/api";
 export function LoginPage() {
 	const [searchParams] = useSearchParams();
 	const [mode, setMode] = useState<"login" | "signup">(
-		searchParams.get("mode") === "signup" ? "signup" : "login"
+		searchParams.get("mode") === "signup" ? "signup" : "login",
 	);
 	const [name, setName] = useState("");
 	const [companyName, setCompanyName] = useState("");
 	const [phone, setPhone] = useState("");
 	const [role, setRole] = useState<"admin" | "staff" | "customer">("customer");
-	const [email, setEmail] = useState("admin@brightloop.io");
-	const [password, setPassword] = useState("Password123!");
+	const [email, setEmail] = useState("");
+	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [successMsg, setSuccessMsg] = useState<string | null>(null);
 	const navigate = useNavigate();
 
-	const fillDemo = (demoEmail: string, demoRole: "admin" | "staff" | "customer") => {
+	const fillDemo = (demoEmail: string) => {
 		setMode("login");
 		setEmail(demoEmail);
 		setPassword("Password123!");
 		setError(null);
+		setSuccessMsg(null);
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
@@ -46,7 +46,7 @@ export function LoginPage() {
 
 		try {
 			if (mode === "signup") {
-				const res = await apiService.signup({
+				await apiService.signup({
 					name: name.trim(),
 					email: email.trim(),
 					password,
@@ -54,16 +54,12 @@ export function LoginPage() {
 					companyName: companyName.trim() || undefined,
 					phone: phone.trim() || undefined,
 				});
-				setSuccessMsg("Account created successfully! Redirecting...");
-				setTimeout(() => {
-					navigate("/dashboard");
-				}, 600);
+				setSuccessMsg("Account created successfully! Redirecting…");
+				setTimeout(() => navigate("/dashboard"), 600);
 			} else {
-				const res = await apiService.login(email.trim(), password);
-				setSuccessMsg("Signed in successfully! Redirecting...");
-				setTimeout(() => {
-					navigate("/dashboard");
-				}, 400);
+				await apiService.login(email.trim(), password);
+				setSuccessMsg("Signed in successfully! Redirecting…");
+				setTimeout(() => navigate("/dashboard"), 400);
 			}
 		} catch (err: any) {
 			console.error("Authentication error:", err);
@@ -71,7 +67,7 @@ export function LoginPage() {
 				err?.message ||
 					(mode === "signup"
 						? "Could not create account. Please check your information."
-						: "Authentication failed. Please verify your credentials.")
+						: "Authentication failed. Please verify your credentials."),
 			);
 		} finally {
 			setLoading(false);
@@ -82,279 +78,89 @@ export function LoginPage() {
 		setMode(newMode);
 		setError(null);
 		setSuccessMsg(null);
-		if (newMode === "signup") {
-			setEmail("");
-			setPassword("");
-		} else {
-			setEmail("admin@brightloop.io");
-			setPassword("Password123!");
-		}
+		setEmail("");
+		setPassword("");
 	};
 
-	const inputClass =
-		"w-full rounded-xl border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20";
-	const iconClass = "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400";
+	const inputClass = "w-full rounded-xl border border-stone-200 bg-white py-3 pl-10 pr-4 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-[#71866b] focus:ring-4 focus:ring-[#71866b]/10";
+	const iconClass = "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400";
+	const roleButton = (value: "admin" | "staff" | "customer", label: string) => (
+		<button
+			key={value}
+			type="button"
+			aria-pressed={role === value}
+			onClick={() => setRole(value)}
+			className={`rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${role === value ? "border-[#aebda8] bg-[#edf1e9] text-[#344a35]" : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"}`}
+		>
+			{label}
+		</button>
+	);
 
 	return (
-		<main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
-			<div className="w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden p-6 sm:p-10">
-				{/* Top Branding */}
-				<div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-800/80">
-					<div className="flex items-center gap-3">
-						<div className="rounded-xl bg-indigo-600 p-2.5 text-white shadow-lg shadow-indigo-600/30">
-							<CircleDollarSign size={26} />
-						</div>
-						<div>
-							<h1 className="text-xl font-bold tracking-tight">Brightloop Billing</h1>
-							<p className="text-xs text-slate-400 font-medium">Subscription Billing Engine</p>
-						</div>
-					</div>
-
-					{/* Mode Tabs */}
-					<div className="flex bg-slate-950/80 p-1 rounded-xl border border-slate-800">
-						<button
-							type="button"
-							onClick={() => switchMode("login")}
-							className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition ${
-								mode === "login"
-									? "bg-indigo-600 text-white shadow"
-									: "text-slate-400 hover:text-white"
-							}`}
-						>
-							Sign In
-						</button>
-						<button
-							type="button"
-							onClick={() => switchMode("signup")}
-							className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition ${
-								mode === "signup"
-									? "bg-indigo-600 text-white shadow"
-									: "text-slate-400 hover:text-white"
-							}`}
-						>
-							Sign Up
-						</button>
-					</div>
-				</div>
-
-				{/* Title / Description */}
-				<div className="mb-6">
-					<h2 className="text-2xl font-bold text-white tracking-tight">
-						{mode === "login" ? "Sign in to your account" : "Create a new account"}
-					</h2>
-					<p className="text-xs text-slate-400 mt-1.5">
-						{mode === "login"
-							? "Enter your credentials or choose a quick demo account below."
-							: "Fill in the details below to register a new user in Brightloop Billing."}
-					</p>
-				</div>
-
-				{/* Demo Credentials Quick-Select (Only on Sign In) */}
-				{mode === "login" && (
-					<div className="mb-6 p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
-						<div className="flex items-center gap-2 mb-2 text-xs font-medium text-slate-400">
-							<ShieldCheck size={14} className="text-indigo-400" />
-							<span>Instant Demo Login (1-click fill):</span>
-						</div>
-						<div className="grid grid-cols-3 gap-2">
-							<button
-								type="button"
-								onClick={() => fillDemo("admin@brightloop.io", "admin")}
-								className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-medium text-slate-300 hover:text-white transition text-center border border-slate-700"
-							>
-								👑 Admin
-							</button>
-							<button
-								type="button"
-								onClick={() => fillDemo("staff.operations@brightloop.io", "staff")}
-								className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-medium text-slate-300 hover:text-white transition text-center border border-slate-700"
-							>
-								🛠️ Staff
-							</button>
-							<button
-								type="button"
-								onClick={() => fillDemo("customer1@acme.corp", "customer")}
-								className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-medium text-slate-300 hover:text-white transition text-center border border-slate-700"
-							>
-								🏢 Customer
-							</button>
+		<main className="auth-page min-h-screen bg-[#f6f7f2] p-3 text-stone-950 sm:p-5 lg:p-8">
+			<div className="auth-frame mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1180px] overflow-hidden rounded-[28px] border border-stone-200/80 bg-white shadow-[0_25px_80px_rgba(36,48,34,.09)] sm:min-h-[calc(100vh-2.5rem)] lg:grid-cols-[.9fr_1.1fr]">
+				<section className="auth-welcome relative flex min-h-[230px] flex-col justify-between overflow-hidden bg-[#eff2eb] p-7 sm:p-10 lg:min-h-full lg:p-12">
+					<div className="auth-orb auth-orb-one" />
+					<div className="auth-orb auth-orb-two" />
+					<Link to="/" className="relative z-10 flex w-fit items-center gap-2.5 text-stone-950">
+						<Infinity size={31} strokeWidth={2.8} className="text-[#263b2d]" />
+						<span className="text-xl font-extrabold tracking-tight">Brightloop</span>
+					</Link>
+					<div className="relative z-10 my-8 max-w-md lg:my-0">
+						<p className="mb-3 text-[10px] font-bold uppercase tracking-[.18em] text-[#60775c]">Subscription billing</p>
+						<h1 className="text-3xl font-bold tracking-[-.04em] sm:text-4xl">{mode === "login" ? "Welcome back" : "Welcome to Brightloop"}</h1>
+						<p className="mt-3 max-w-sm text-sm leading-6 text-stone-600">
+							{mode === "login" ? "Sign in to manage your subscriptions, customers and billing." : "Create an account to manage your subscriptions and invoices."}
+						</p>
+						<div className="auth-mark mt-8 flex h-32 w-32 items-center justify-center rounded-[28px] border border-white/80 bg-white/70 text-[#7d9275] shadow-[0_16px_35px_rgba(48,65,42,.09)] sm:h-40 sm:w-40">
+							<Infinity size={66} strokeWidth={2.2} />
 						</div>
 					</div>
-				)}
+					<p className="relative z-10 hidden text-[11px] font-medium text-stone-500 lg:block">Subscriptions, billing and customer relationships in one place.</p>
+				</section>
 
-				{/* Alerts */}
-				{error && (
-					<div className="mb-6 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-start gap-3">
-						<AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-						<span>{error}</span>
-					</div>
-				)}
-
-				{successMsg && (
-					<div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-start gap-3">
-						<CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
-						<span>{successMsg}</span>
-					</div>
-				)}
-
-				{/* Main Form */}
-				<form onSubmit={handleSubmit} className="space-y-4">
-					{mode === "signup" && (
-						<>
+				<section className="flex items-center justify-center px-6 py-8 sm:px-10 lg:px-14">
+					<div className="w-full max-w-[420px]">
+						<div className="mb-7 flex items-start justify-between gap-4">
 							<div>
-								<label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-									Full Name *
-								</label>
-								<div className="relative">
-									<UserRound size={17} className={iconClass} />
-									<input
-										type="text"
-										className={`${inputClass} pl-10`}
-										placeholder="e.g. John Doe"
-										value={name}
-										onChange={(e) => setName(e.target.value)}
-										required
-									/>
-								</div>
+								<p className="mb-2 text-[10px] font-bold uppercase tracking-[.18em] text-[#60775c]">Your workspace</p>
+								<h2 className="text-[26px] font-bold tracking-[-.04em]">{mode === "login" ? "Sign in to Brightloop" : "Create your account"}</h2>
+								<p className="mt-2 text-sm text-stone-500">{mode === "login" ? "Enter your credentials to continue." : "Enter your details to get started."}</p>
 							</div>
-
-							<div>
-								<label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-									Account Role *
-								</label>
-								<div className="grid grid-cols-3 gap-2">
-									<button
-										type="button"
-										onClick={() => setRole("admin")}
-										className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
-											role === "admin"
-												? "border-indigo-500 bg-indigo-500/20 text-indigo-300"
-												: "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
-										}`}
-									>
-										Admin
-									</button>
-									<button
-										type="button"
-										onClick={() => setRole("staff")}
-										className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
-											role === "staff"
-												? "border-indigo-500 bg-indigo-500/20 text-indigo-300"
-												: "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
-										}`}
-									>
-										Staff
-									</button>
-									<button
-										type="button"
-										onClick={() => setRole("customer")}
-										className={`py-2 px-3 rounded-xl border text-xs font-medium transition ${
-											role === "customer"
-												? "border-indigo-500 bg-indigo-500/20 text-indigo-300"
-												: "border-slate-800 bg-slate-950 text-slate-400 hover:text-white"
-										}`}
-									>
-										Customer
-									</button>
-								</div>
+							<div className="flex shrink-0 rounded-xl border border-stone-200 bg-[#f7f8f4] p-1">
+								<button type="button" onClick={() => switchMode("login")} className={`rounded-lg px-3 py-2 text-[11px] font-bold transition ${mode === "login" ? "bg-[#263b2d] text-white shadow-sm" : "text-stone-500 hover:text-stone-900"}`}>Sign in</button>
+								<button type="button" onClick={() => switchMode("signup")} className={`rounded-lg px-3 py-2 text-[11px] font-bold transition ${mode === "signup" ? "bg-[#263b2d] text-white shadow-sm" : "text-stone-500 hover:text-stone-900"}`}>Sign up</button>
 							</div>
-
-							<div>
-								<label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-									Company Name (Optional)
-								</label>
-								<div className="relative">
-									<Building2 size={17} className={iconClass} />
-									<input
-										type="text"
-										className={`${inputClass} pl-10`}
-										placeholder="e.g. Acme Corporation"
-										value={companyName}
-										onChange={(e) => setCompanyName(e.target.value)}
-									/>
-								</div>
-							</div>
-
-							<div>
-								<label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-									Phone Number (Optional)
-								</label>
-								<div className="relative">
-									<Phone size={17} className={iconClass} />
-									<input
-										type="tel"
-										className={`${inputClass} pl-10`}
-										placeholder="e.g. +91 98765 43210"
-										value={phone}
-										onChange={(e) => setPhone(e.target.value)}
-									/>
-								</div>
-							</div>
-						</>
-					)}
-
-					<div>
-						<label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-							Email Address *
-						</label>
-						<div className="relative">
-							<Mail size={17} className={iconClass} />
-							<input
-								type="email"
-								className={`${inputClass} pl-10`}
-								placeholder="name@company.com"
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								required
-							/>
 						</div>
+
+						{error && <div role="alert" className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700"><AlertCircle size={17} className="mt-0.5 shrink-0" /><span>{error}</span></div>}
+						{successMsg && <div role="status" className="mb-4 flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-sm text-emerald-800"><CheckCircle2 size={17} className="mt-0.5 shrink-0" /><span>{successMsg}</span></div>}
+
+						{mode === "login" && <div className="mb-5 rounded-2xl border border-stone-200 bg-[#fafbf8] p-3.5">
+							<div className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold text-stone-600"><ShieldCheck size={14} className="text-[#60775c]" />Demo accounts</div>
+							<div className="grid grid-cols-3 gap-2">
+								<button type="button" onClick={() => fillDemo("admin@brightloop.io")} className="rounded-lg border border-stone-200 bg-white px-2 py-2 text-[10px] font-semibold text-stone-700 transition hover:border-[#bdcbb7] hover:bg-[#f2f5ef]">♛ Admin</button>
+								<button type="button" onClick={() => fillDemo("staff.operations@brightloop.io")} className="rounded-lg border border-stone-200 bg-white px-2 py-2 text-[10px] font-semibold text-stone-700 transition hover:border-[#bdcbb7] hover:bg-[#f2f5ef]">⚒ Staff</button>
+								<button type="button" onClick={() => fillDemo("customer1@acme.corp")} className="rounded-lg border border-stone-200 bg-white px-2 py-2 text-[10px] font-semibold text-stone-700 transition hover:border-[#bdcbb7] hover:bg-[#f2f5ef]">▦ Customer</button>
+							</div>
+						</div>}
+
+						<form onSubmit={handleSubmit} className="space-y-3.5">
+							{mode === "signup" && <>
+								<div><label htmlFor="signup-name" className="mb-1.5 block text-[11px] font-bold text-stone-600">Full name</label><div className="relative"><UserRound size={17} className={iconClass} /><input id="signup-name" autoComplete="name" className={inputClass} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} required /></div></div>
+								<div><label className="mb-1.5 block text-[11px] font-bold text-stone-600">Account role</label><div className="grid grid-cols-3 gap-2">{roleButton("admin", "Admin")}{roleButton("staff", "Staff")}{roleButton("customer", "Customer")}</div></div>
+								<div><label htmlFor="signup-company" className="mb-1.5 block text-[11px] font-bold text-stone-600">Company <span className="font-normal text-stone-400">(optional)</span></label><div className="relative"><Building2 size={17} className={iconClass} /><input id="signup-company" autoComplete="organization" className={inputClass} placeholder="Company name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} /></div></div>
+								<div><label htmlFor="signup-phone" className="mb-1.5 block text-[11px] font-bold text-stone-600">Phone <span className="font-normal text-stone-400">(optional)</span></label><div className="relative"><Phone size={17} className={iconClass} /><input id="signup-phone" type="tel" autoComplete="tel" className={inputClass} placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} /></div></div>
+							</>}
+							<div><label htmlFor="account-email" className="mb-1.5 block text-[11px] font-bold text-stone-600">Email address</label><div className="relative"><Mail size={17} className={iconClass} /><input id="account-email" type="email" autoComplete="email" className={inputClass} placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} required /></div></div>
+							<div><label htmlFor="account-password" className="mb-1.5 block text-[11px] font-bold text-stone-600">Password</label><div className="relative"><Lock size={17} className={iconClass} /><input id="account-password" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} className={inputClass} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} /></div></div>
+							{mode === "login" && <div className="flex items-center justify-between py-1 text-[11px] text-stone-500"><label className="flex items-center gap-2"><input type="checkbox" className="rounded border-stone-300 accent-[#344a35]" />Remember me</label><span className="font-semibold text-stone-600">Forgot password?</span></div>}
+							<button type="submit" disabled={loading} className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-[#263b2d] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#344d39] disabled:opacity-60">{loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}{!loading && <ArrowRight size={16} />}</button>
+						</form>
+
+						<p className="mt-5 text-center text-xs text-stone-500">Protected workspace · <Link to="/" className="font-semibold text-stone-700 underline underline-offset-2">Back to home</Link></p>
 					</div>
-
-					<div>
-						<label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-							Password *
-						</label>
-						<div className="relative">
-							<Lock size={17} className={iconClass} />
-							<input
-								type="password"
-								className={`${inputClass} pl-10`}
-								placeholder={mode === "signup" ? "At least 6 characters" : "Password"}
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								required
-								minLength={6}
-							/>
-						</div>
-					</div>
-
-					<button
-						type="submit"
-						disabled={loading}
-						className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-sm rounded-xl shadow-lg shadow-indigo-600/30 transition duration-150 mt-2"
-					>
-						{loading
-							? "Please wait..."
-							: mode === "login"
-							? "Sign In to Brightloop"
-							: "Create Account & Sign In"}
-						{!loading && <ArrowRight size={17} />}
-					</button>
-				</form>
-
-				{/* Switch Mode Footer */}
-				<div className="mt-6 pt-5 border-t border-slate-800 text-center">
-					<p className="text-xs text-slate-400">
-						{mode === "login" ? "Don't have an account? " : "Already registered? "}
-						<button
-							type="button"
-							onClick={() => switchMode(mode === "login" ? "signup" : "login")}
-							className="font-semibold text-indigo-400 hover:text-indigo-300 ml-1 underline underline-offset-2"
-						>
-							{mode === "login" ? "Sign up now" : "Sign in here"}
-						</button>
-					</p>
-				</div>
+				</section>
 			</div>
 		</main>
 	);

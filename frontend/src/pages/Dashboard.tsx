@@ -53,11 +53,24 @@ export const DashboardPage: React.FC = () => {
 		);
 	}
 
-	const chartData = (analytics.revenueHistory || []).map((item) => ({
+	const chartData = (analytics.revenueHistory || analytics.revenueTrend || []).map((item: any) => ({
 		month: item.month,
-		mrr: item.mrrPaise / 100,
-		arr: item.arrPaise / 100,
+		mrr: Number(item.mrrPaise || item.revenue || 0) / 100,
+		arr: Number(item.arrPaise || (item.revenue ? item.revenue * 12 : 0)) / 100,
 	}));
+
+	const statusBreakdown: { status: string; count: number }[] = Array.isArray(analytics.subscriptionsByStatus)
+		? analytics.subscriptionsByStatus
+		: Object.entries(analytics.subscriptionsByStatus || analytics.subscriptionStats || {}).map(([st, cnt]) => ({
+				status: st,
+				count: Number(cnt) || 0,
+		  }));
+
+	const agingBreakdown: any[] = Array.isArray(analytics.agingOverdue)
+		? analytics.agingOverdue
+		: Array.isArray(analytics.overdueAging)
+		? analytics.overdueAging
+		: [];
 
 	const mrrPaise = summary.mrrPaise ?? summary.mrrInPaise ?? 0;
 	const arrPaise = summary.arrPaise ?? summary.arrInPaise ?? 0;
@@ -129,19 +142,23 @@ export const DashboardPage: React.FC = () => {
 					<div className="text-2xl font-bold text-rose-600">
 						{formatCurrency(overdueAmount)}
 					</div>
-					<div className="text-xs text-rose-600 mt-2 font-medium">
-						{overdueCount} overdue invoices
+					<div className="text-xs text-rose-500 mt-2 font-medium">
+						{overdueCount} pending overdue invoices
 					</div>
 				</div>
 			</div>
 
-			<div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-				<h2 className="text-lg font-bold text-gray-900 mb-1">
-					MRR Growth Trend
-				</h2>
-				<p className="text-xs text-gray-500 mb-6">
-					Historical recurring revenue performance in INR (₹)
-				</p>
+			<div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
+				<div className="flex justify-between items-center">
+					<div>
+						<h3 className="text-base font-bold text-gray-900">
+							Revenue trend
+						</h3>
+						<p className="text-xs text-gray-500">
+							MRR vs projected ARR progression
+						</p>
+					</div>
+				</div>
 				<div className="h-72 w-full">
 					<ResponsiveContainer width="100%" height="100%">
 						<AreaChart
@@ -149,54 +166,34 @@ export const DashboardPage: React.FC = () => {
 							margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
 						>
 							<defs>
-								<linearGradient
-									id="mrrGradient"
-									x1="0"
-									y1="0"
-									x2="0"
-									y2="1"
-								>
-									<stop
-										offset="5%"
-						stopColor="#526d4f"
-										stopOpacity={0.8}
-									/>
-									<stop
-										offset="95%"
-						stopColor="#526d4f"
-										stopOpacity={0}
-									/>
+								<linearGradient id="mrrGradient" x1="0" y1="0" x2="0" y2="1">
+									<stop offset="5%" stopColor="#4f46e5" stopOpacity={0.2} />
+									<stop offset="95%" stopColor="#4f46e5" stopOpacity={0} />
 								</linearGradient>
 							</defs>
-							<CartesianGrid
-								strokeDasharray="3 3"
-								vertical={false}
-								stroke="#e2e8f0"
-							/>
-							<XAxis
-								dataKey="month"
-								stroke="#64748b"
-								fontSize={12}
-								tickLine={false}
-							/>
+							<CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+							<XAxis dataKey="month" stroke="#9ca3af" fontSize={12} tickLine={false} />
 							<YAxis
-								stroke="#64748b"
+								stroke="#9ca3af"
 								fontSize={12}
 								tickLine={false}
-								tickFormatter={(val) =>
-									`₹${(val / 1000).toFixed(0)}k`
-								}
+								axisLine={false}
+								tickFormatter={(value) => `₹${value.toLocaleString()}`}
 							/>
 							<Tooltip
-								formatter={(value: any) => [
-									`₹${Number(value).toLocaleString("en-IN")}`,
-									"MRR",
-								]}
+								formatter={(value: any) => [`₹${Number(value).toLocaleString()}`, "Amount"]}
+								contentStyle={{
+									backgroundColor: "#1f2937",
+									borderColor: "#374151",
+									borderRadius: "8px",
+									color: "#fff",
+								}}
 							/>
 							<Area
 								type="monotone"
 								dataKey="mrr"
-				stroke="#526d4f"
+								name="MRR"
+								stroke="#4f46e5"
 								strokeWidth={2}
 								fillOpacity={1}
 								fill="url(#mrrGradient)"
@@ -212,7 +209,7 @@ export const DashboardPage: React.FC = () => {
 						Subscription Status Breakdown
 					</h3>
 					<div className="space-y-3">
-						{(analytics.subscriptionsByStatus || []).map((s) => (
+						{statusBreakdown.map((s) => (
 							<div
 								key={s.status}
 								className="flex justify-between items-center text-sm border-b border-gray-100 pb-2"
@@ -233,19 +230,23 @@ export const DashboardPage: React.FC = () => {
 						Overdue Invoices Aging
 					</h3>
 					<div className="space-y-3">
-						{(analytics.agingOverdue || []).map((a) => (
-							<div
-								key={a.range}
-								className="flex justify-between items-center text-sm border-b border-gray-100 pb-2"
-							>
-								<span className="text-gray-700 font-medium">
-									{a.range}
-								</span>
-								<span className="font-bold text-rose-600">
-									{formatCurrency(a.amountPaise)} ({a.count})
-								</span>
-							</div>
-						))}
+						{agingBreakdown.length === 0 ? (
+							<p className="text-xs text-gray-400">No overdue invoices.</p>
+						) : (
+							agingBreakdown.map((a, idx) => (
+								<div
+									key={a.range || idx}
+									className="flex justify-between items-center text-sm border-b border-gray-100 pb-2"
+								>
+									<span className="text-gray-700 font-medium">
+										{a.range || "Current"}
+									</span>
+									<span className="font-bold text-rose-600">
+										{formatCurrency(a.amountPaise ?? a.amountInPaise ?? 0)} ({a.count ?? 0})
+									</span>
+								</div>
+							))
+						)}
 					</div>
 				</div>
 			</div>
