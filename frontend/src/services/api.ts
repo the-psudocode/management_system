@@ -1,6 +1,6 @@
 // frontend/src/services/api.ts
 import axios from "axios";
-import { getCurrentUserToken } from "./firebase";
+import { getCurrentUserToken, loginWithEmail, signUpWithEmail } from "./firebase";
 import type {
 	Customer,
 	Product,
@@ -71,7 +71,7 @@ export async function getCurrentUserProfile(): Promise<AuthProfile> {
 }
 
 export async function registerCustomerAccount(data: { name: string; companyName?: string; phone?: string }): Promise<void> {
-	await apiClient.post('/auth/register', data);
+	await apiClient.post('/auth/signup', data);
 }
 
 export async function getPortalOverview(): Promise<PortalOverview> {
@@ -653,32 +653,29 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
 // ============================================================
 
 export async function loginUser(email: string, password: string) {
-	const res: any = await apiClient.post("/auth/login", { email, password });
-	if (res?.token) {
-		localStorage.setItem("brightloop_token", res.token);
-	}
-	if (res?.user) {
-		localStorage.setItem("brightloop_user", JSON.stringify(res.user));
-	}
-	return res;
+	localStorage.removeItem("brightloop_token");
+	const credential = await loginWithEmail(email, password);
+	const profile = await getCurrentUserProfile();
+	localStorage.setItem("brightloop_user", JSON.stringify(profile));
+	return { user: profile, firebaseUser: credential };
 }
 
 export async function signupUser(data: {
 	name: string;
 	email: string;
 	password: string;
-	role?: string;
 	companyName?: string;
 	phone?: string;
 }) {
-	const res: any = await apiClient.post("/auth/signup", data);
-	if (res?.token) {
-		localStorage.setItem("brightloop_token", res.token);
-	}
-	if (res?.user) {
-		localStorage.setItem("brightloop_user", JSON.stringify(res.user));
-	}
-	return res;
+	localStorage.removeItem("brightloop_token");
+	await signUpWithEmail(data.email, data.password);
+	const profile: any = await apiClient.post("/auth/signup", {
+		name: data.name,
+		companyName: data.companyName,
+		phone: data.phone,
+	});
+	localStorage.setItem("brightloop_user", JSON.stringify(profile));
+	return { user: profile };
 }
 
 export function logout() {

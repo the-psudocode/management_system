@@ -22,7 +22,6 @@ export function LoginPage() {
 	const [name, setName] = useState("");
 	const [companyName, setCompanyName] = useState("");
 	const [phone, setPhone] = useState("");
-	const [role, setRole] = useState<"admin" | "staff" | "customer">("customer");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
@@ -33,7 +32,7 @@ export function LoginPage() {
 	const fillDemo = (demoEmail: string) => {
 		setMode("login");
 		setEmail(demoEmail);
-		setPassword("Password123!");
+		setPassword("");
 		setError(null);
 		setSuccessMsg(null);
 	};
@@ -45,22 +44,22 @@ export function LoginPage() {
 		setSuccessMsg(null);
 
 		try {
+			let result: any;
 			if (mode === "signup") {
-				await apiService.signup({
+				result = await apiService.signup({
 					name: name.trim(),
 					email: email.trim(),
 					password,
-					role,
 					companyName: companyName.trim() || undefined,
 					phone: phone.trim() || undefined,
 				});
 				setSuccessMsg("Account created successfully! Redirecting…");
-				setTimeout(() => navigate("/dashboard"), 600);
 			} else {
-				await apiService.login(email.trim(), password);
+				result = await apiService.login(email.trim(), password);
 				setSuccessMsg("Signed in successfully! Redirecting…");
-				setTimeout(() => navigate("/dashboard"), 400);
 			}
+			const destination = String(result?.user?.role || "").toLowerCase() === "customer" ? "/portal" : "/dashboard";
+			setTimeout(() => navigate(destination, { replace: true }), mode === "signup" ? 600 : 400);
 		} catch (err: any) {
 			console.error("Authentication error:", err);
 			setError(
@@ -84,18 +83,6 @@ export function LoginPage() {
 
 	const inputClass = "w-full rounded-xl border border-stone-200 bg-white py-3 pl-10 pr-4 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-[#71866b] focus:ring-4 focus:ring-[#71866b]/10";
 	const iconClass = "pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400";
-	const roleButton = (value: "admin" | "staff" | "customer", label: string) => (
-		<button
-			key={value}
-			type="button"
-			aria-pressed={role === value}
-			onClick={() => setRole(value)}
-			className={`rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${role === value ? "border-[#aebda8] bg-[#edf1e9] text-[#344a35]" : "border-stone-200 bg-white text-stone-600 hover:bg-stone-50"}`}
-		>
-			{label}
-		</button>
-	);
-
 	return (
 		<main className="auth-page min-h-screen bg-[#f6f7f2] p-3 text-stone-950 sm:p-5 lg:p-8">
 			<div className="auth-frame mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1180px] overflow-hidden rounded-[28px] border border-stone-200/80 bg-white shadow-[0_25px_80px_rgba(36,48,34,.09)] sm:min-h-[calc(100vh-2.5rem)] lg:grid-cols-[.9fr_1.1fr]">
@@ -148,7 +135,6 @@ export function LoginPage() {
 						<form onSubmit={handleSubmit} className="space-y-3.5">
 							{mode === "signup" && <>
 								<div><label htmlFor="signup-name" className="mb-1.5 block text-[11px] font-bold text-stone-600">Full name</label><div className="relative"><UserRound size={17} className={iconClass} /><input id="signup-name" autoComplete="name" className={inputClass} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} required /></div></div>
-								<div><label className="mb-1.5 block text-[11px] font-bold text-stone-600">Account role</label><div className="grid grid-cols-3 gap-2">{roleButton("admin", "Admin")}{roleButton("staff", "Staff")}{roleButton("customer", "Customer")}</div></div>
 								<div><label htmlFor="signup-company" className="mb-1.5 block text-[11px] font-bold text-stone-600">Company <span className="font-normal text-stone-400">(optional)</span></label><div className="relative"><Building2 size={17} className={iconClass} /><input id="signup-company" autoComplete="organization" className={inputClass} placeholder="Company name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} /></div></div>
 								<div><label htmlFor="signup-phone" className="mb-1.5 block text-[11px] font-bold text-stone-600">Phone <span className="font-normal text-stone-400">(optional)</span></label><div className="relative"><Phone size={17} className={iconClass} /><input id="signup-phone" type="tel" autoComplete="tel" className={inputClass} placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} /></div></div>
 							</>}

@@ -3,43 +3,39 @@ import prisma from './src/database/index.js';
 const demoCatalog = [
   {
     product: {
-      name: 'Brightloop Billing Suite',
+      name: 'Brightloop Web Development',
       type: 'software',
-      description: 'Subscription billing, invoice management and revenue operations for growing teams.',
+      description: 'Managed website development and continuous improvement. Includes responsive design, content updates, uptime monitoring, and monthly performance reports.',
       salesPricePaise: 499900n,
       costPricePaise: 0n,
     },
     plans: [
-      { name: 'Starter', billingInterval: 'monthly', amountPaise: 499900n, description: 'Core billing tools for small teams.' },
-      { name: 'Growth', billingInterval: 'monthly', amountPaise: 1499900n, description: 'Automated billing and reporting for scaling businesses.' },
-      { name: 'Scale', billingInterval: 'yearly', amountPaise: 14999900n, description: 'Annual billing suite for larger operations.' },
+      { name: 'Starter', billingInterval: 'monthly', amountPaise: 499900n, description: 'Responsive business website, hosting setup, and up to 2 content updates each month.' },
+      { name: 'Professional', billingInterval: 'monthly', amountPaise: 999900n, description: 'Custom website, analytics integration, priority updates, and monthly performance review.' },
     ],
   },
   {
-    product: {
-      name: 'Cloud Storage Vault',
-      type: 'service',
-      description: 'Managed cloud storage with scheduled backups and secure file retention.',
-      salesPricePaise: 29900n,
-      costPricePaise: 0n,
-    },
+    product: { name: 'Brightloop Cloud Hosting', type: 'service', description: 'Managed cloud hosting with SSL, automated backups, uptime monitoring, and scalable resources.', salesPricePaise: 49900n, costPricePaise: 0n },
     plans: [
-      { name: 'Vault Basic', billingInterval: 'monthly', amountPaise: 29900n, description: 'Secure storage for essential business files.' },
-      { name: 'Vault Business', billingInterval: 'monthly', amountPaise: 89900n, description: 'Expanded storage and priority backup monitoring.' },
+      { name: 'Basic', billingInterval: 'monthly', amountPaise: 49900n, description: 'Single site, SSL, daily backups, and 99.9% uptime monitoring.' },
+      { name: 'Business', billingInterval: 'monthly', amountPaise: 149900n, description: 'Multiple sites, expanded resources, priority support, and hourly backups.' },
     ],
   },
   {
-    product: {
-      name: 'Priority Customer Support',
-      type: 'service',
-      description: 'A dedicated support service for subscription and billing operations.',
-      salesPricePaise: 99900n,
-      costPricePaise: 0n,
-    },
-    plans: [
-      { name: 'Support Standard', billingInterval: 'monthly', amountPaise: 99900n, description: 'Business-hours email support.' },
-      { name: 'Support Plus', billingInterval: 'monthly', amountPaise: 249900n, description: 'Priority support with faster response targets.' },
-    ],
+    product: { name: 'Brightloop Business Email', type: 'service', description: 'Business email hosting with custom domains, spam filtering, calendar and contact sync.', salesPricePaise: 19900n, costPricePaise: 0n },
+    plans: [{ name: 'Standard', billingInterval: 'monthly', amountPaise: 19900n, description: 'One business mailbox, custom domain, spam filtering, and calendar sync.' }],
+  },
+  {
+    product: { name: 'Brightloop Cybersecurity Monitoring', type: 'service', description: 'Continuous security monitoring with vulnerability checks, alerting, and monthly security summaries.', salesPricePaise: 299900n, costPricePaise: 0n },
+    plans: [{ name: 'Essential', billingInterval: 'monthly', amountPaise: 299900n, description: 'Continuous monitoring, vulnerability scans, incident alerts, and a monthly report.' }],
+  },
+  {
+    product: { name: 'Brightloop Database Management', type: 'service', description: 'Database health monitoring, backups, performance tuning, and recovery planning.', salesPricePaise: 199900n, costPricePaise: 0n },
+    plans: [{ name: 'Standard', billingInterval: 'monthly', amountPaise: 199900n, description: 'Daily backups, health monitoring, performance checks, and recovery assistance.' }],
+  },
+  {
+    product: { name: 'Brightloop Software Maintenance', type: 'service', description: 'Keep business software secure and reliable with updates, issue triage, and maintenance reports.', salesPricePaise: 399900n, costPricePaise: 0n },
+    plans: [{ name: 'Premium', billingInterval: 'monthly', amountPaise: 399900n, description: 'Security updates, monthly maintenance window, issue triage, and priority support.' }],
   },
 ];
 
