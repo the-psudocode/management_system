@@ -1,8 +1,10 @@
 import app from './app.js';
 import config from './config/index.js';
 import { disconnectDatabase, checkDatabaseHealth } from './database/index.js';
+import { startBillingScheduler } from './jobs/billingScheduler.js';
 
 const startServer = async () => {
+  let stopBillingScheduler = () => {};
   // Check database connectivity on startup (non-fatal, server still starts to serve health status)
   const dbHealth = await checkDatabaseHealth();
   console.log(`[Database] Status: ${dbHealth.status} | Provider: ${dbHealth.provider}`);
@@ -14,12 +16,14 @@ const startServer = async () => {
   const server = app.listen(config.port, () => {
     console.log(`[Server] Brightloop Billing Server running in ${config.env} mode on http://localhost:${config.port}`);
     console.log(`[Server] Health endpoint: http://localhost:${config.port}/api/health`);
+    stopBillingScheduler = startBillingScheduler();
   });
 
   const handleShutdown = async (signal) => {
     console.log(`\n[Server] Received ${signal}. Shutting down gracefully...`);
     server.close(async () => {
       console.log('[Server] HTTP server closed.');
+      stopBillingScheduler();
       await disconnectDatabase();
       console.log('[Database] Neon PostgreSQL connection closed.');
       process.exit(0);
