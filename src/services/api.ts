@@ -1,6 +1,6 @@
 // ============================================================
 // src/services/api.ts
-// API service layer
+// API service layer with full CRUD support for local state
 // ============================================================
 
 import type {
@@ -35,9 +35,11 @@ function paginate<T>(
 		total: items.length,
 		page,
 		pageSize,
-		totalPages: Math.ceil(items.length / pageSize),
+		totalPages: Math.ceil(items.length / pageSize) || 1,
 	};
 }
+
+// ---------- DASHBOARD ----------
 
 export async function getDashboardSummary(): Promise<DashboardSummary> {
 	await delay();
@@ -49,21 +51,84 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
 	return mockDashboardAnalytics;
 }
 
+// ---------- CUSTOMERS ----------
+
 export async function getCustomers(
 	page = 1,
 	pageSize = 10,
 	search = "",
+	statusFilter = "all",
 ): Promise<PaginatedResponse<Customer>> {
 	await delay();
-	const filtered = search
-		? mockCustomers.filter(
-				(c) =>
-					c.name.toLowerCase().includes(search.toLowerCase()) ||
-					c.company.toLowerCase().includes(search.toLowerCase()),
-			)
-		: mockCustomers;
+	let filtered = [...mockCustomers];
+
+	if (search) {
+		const q = search.toLowerCase();
+		filtered = filtered.filter(
+			(c) =>
+				c.name.toLowerCase().includes(q) ||
+				c.email.toLowerCase().includes(q) ||
+				c.company.toLowerCase().includes(q) ||
+				c.city.toLowerCase().includes(q),
+		);
+	}
+
+	if (statusFilter !== "all") {
+		filtered = filtered.filter((c) => c.status === statusFilter);
+	}
+
 	return paginate(filtered, page, pageSize);
 }
+
+export async function getCustomerById(
+	id: string,
+): Promise<Customer | undefined> {
+	await delay();
+	return mockCustomers.find((c) => c.id === id);
+}
+
+export async function createCustomer(
+	data: Omit<Customer, "id" | "createdAt">,
+): Promise<Customer> {
+	await delay();
+	const newCustomer: Customer = {
+		...data,
+		id: `cust_${String(mockCustomers.length + 1).padStart(3, "0")}`,
+		createdAt: new Date().toISOString().split("T")[0],
+	};
+	mockCustomers.unshift(newCustomer);
+	mockDashboardSummary.totalCustomers += 1;
+	return newCustomer;
+}
+
+export async function updateCustomer(
+	id: string,
+	data: Partial<Customer>,
+): Promise<Customer> {
+	await delay();
+	const idx = mockCustomers.findIndex((c) => c.id === id);
+	if (idx !== -1) {
+		mockCustomers[idx] = { ...mockCustomers[idx], ...data };
+		return mockCustomers[idx];
+	}
+	throw new Error("Customer not found");
+}
+
+export async function getCustomerSubscriptions(
+	customerId: string,
+): Promise<Subscription[]> {
+	await delay();
+	return mockSubscriptions.filter((s) => s.customerId === customerId);
+}
+
+export async function getCustomerInvoices(
+	customerId: string,
+): Promise<Invoice[]> {
+	await delay();
+	return mockInvoices.filter((i) => i.customerId === customerId);
+}
+
+// ---------- PRODUCTS ----------
 
 export async function getProducts(
 	page = 1,
@@ -79,6 +144,8 @@ export async function getProducts(
 	return paginate(filtered, page, pageSize);
 }
 
+// ---------- SUBSCRIPTIONS ----------
+
 export async function getSubscriptions(
 	page = 1,
 	pageSize = 10,
@@ -92,6 +159,8 @@ export async function getSubscriptions(
 		: mockSubscriptions;
 	return paginate(filtered, page, pageSize);
 }
+
+// ---------- INVOICES ----------
 
 export async function getInvoices(
 	page = 1,
