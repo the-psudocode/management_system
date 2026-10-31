@@ -15,19 +15,19 @@ import {
 	ChevronLeft,
 	ChevronRight,
 } from "lucide-react";
-import type { Customer, Subscription, Invoice } from "../../types";
+import type { Customer, Subscription, Invoice } from "../types";
 import {
 	getCustomers,
 	createCustomer,
 	updateCustomer,
 	getCustomerSubscriptions,
 	getCustomerInvoices,
-} from "../../services/api";
+} from "../services/api";
 import {
-	formatDate,
 	formatCurrency,
+	formatDate,
 	getStatusBadgeClass,
-} from "../../utils/format";
+} from "../utils/format";
 
 export const Customers: React.FC = () => {
 	const [customers, setCustomers] = useState<Customer[]>([]);
@@ -106,7 +106,9 @@ export const Customers: React.FC = () => {
 			state: c.state,
 			pincode: c.pincode,
 			gstin: c.gstin,
-			status: c.status,
+			status: (c.status === "inactive" ? "inactive" : "active") as
+				| "active"
+				| "inactive",
 		});
 	};
 
@@ -761,4 +763,4 @@ export const Customers: React.FC = () => {
 	);
 };
 
-export default Customers;
+export const CustomersPage = Customers;

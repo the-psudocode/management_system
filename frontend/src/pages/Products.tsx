@@ -13,14 +13,14 @@ import {
 	CheckCircle,
 	XCircle,
 } from "lucide-react";
-import type { Product, ProductVariant } from "../../types";
+import type { Product, ProductVariant } from "../types";
 import {
 	getProducts,
 	createProduct,
 	updateProduct,
 	toggleProductStatus,
-} from "../../services/api";
-import { formatCurrency, formatDate } from "../../utils/format";
+} from "../services/api";
+import { formatCurrency, formatDate } from "../utils/format";
 
 export const Products: React.FC = () => {
 	const [products, setProducts] = useState<Product[]>([]);
@@ -157,8 +157,11 @@ export const Products: React.FC = () => {
 				name: formData.name,
 				description: formData.description,
 				category: formData.category,
-				basePriceInPaise,
-				variants: parsedVariants,
+				status: formData.isActive ? "active" : "inactive",
+				basePriceInPaise: Math.round(
+					parseFloat(formData.basePriceInRupees || "0") * 100,
+				),
+				variants: (formData as any).variants || [],
 				isActive: formData.isActive,
 			});
 
@@ -763,4 +766,4 @@ export const Products: React.FC = () => {
 	);
 };
 
-export default Products;
+export const ProductsPage = Products;
