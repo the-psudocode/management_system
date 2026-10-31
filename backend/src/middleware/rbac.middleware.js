@@ -65,8 +65,41 @@ export const authorizeSelfOrRoles = ({
   };
 };
 
+export const authorizeCustomerSelfOrRoles = ({
+  paramKey = 'id',
+  elevatedRoles = ['admin', 'staff']
+} = {}) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return next(ApiError.unauthorized('Authentication required before authorization'));
+    }
+
+    // Admins and Staff have elevated access to view/update any customer record
+    if (elevatedRoles.includes(req.user.role)) {
+      return next();
+    }
+
+    // Customers can strictly only access their own customer profile via req.user.customer.id
+    if (req.user.role === 'customer') {
+      const targetCustomerId = req.params[paramKey] || req.query[paramKey] || req.body[paramKey];
+      const ownCustomerId = req.user.customer?.id;
+
+      if (targetCustomerId && ownCustomerId && targetCustomerId === ownCustomerId) {
+        return next();
+      }
+
+      return next(
+        ApiError.forbidden('Access forbidden: Customers are strictly permitted to access only their own records.')
+      );
+    }
+
+    return next(ApiError.forbidden('Access forbidden: Insufficient permissions.'));
+  };
+};
+
 export default {
   authorizeRoles,
-  authorizeSelfOrRoles
+  authorizeSelfOrRoles,
+  authorizeCustomerSelfOrRoles
 };
 

@@ -4,7 +4,8 @@ import config from './config/index.js';
 import { checkDatabaseHealth } from './database/index.js';
 import { notFound, errorHandler } from './middleware/index.js';
 import { sendSuccess } from './utils/response.js';
-import { authRouter, initAuthSchema } from './modules/auth/index.js';
+import { authRouter } from './modules/auth/index.js';
+import { customerRouter } from './modules/customer/index.js';
 
 export const createApp = () => {
   const app = express();
@@ -57,6 +58,9 @@ export const createApp = () => {
 
   // Authentication and Authorization Routes
   app.use('/api/auth', authRouter);
+
+  // Customer Management Routes
+  app.use('/api/customers', customerRouter);
 
   // 404 Not Found Middleware
   app.use(notFound);
