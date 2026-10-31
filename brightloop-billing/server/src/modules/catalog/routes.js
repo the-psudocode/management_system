@@ -5,26 +5,13 @@ import { requireRole } from '../../middleware/authorize.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/response.js';
 import { asyncHandler, pagination, pageResult } from '../shared/handlers.js';
+import { customerSelect, serializeCustomer, parseCustomerInput } from '../customers/customerDto.js';
 
 const router = Router();
 const staff = requireRole('admin', 'staff');
 const admin = requireRole('admin');
 const idParam = z.string().min(1);
 const money = z.string().regex(/^\d+$/, 'Amount must be a non-negative integer string in paise.').transform(BigInt);
-const optionalMoney = z.string().regex(/^\d+$/).transform(BigInt).optional();
-
-const customerInput = z.object({
-  userId: z.string().min(1),
-  companyName: z.string().trim().max(200).optional(),
-  phone: z.string().trim().max(40).optional(),
-  billingAddress: z.string().trim().max(2000).optional(),
-  billingCity: z.string().trim().max(120).optional(),
-  billingStateCode: z.string().trim().max(20).optional(),
-  postalCode: z.string().trim().max(20).optional(),
-  gstin: z.string().trim().max(30).optional(),
-  creditLimitPaise: optionalMoney,
-});
-
 router.get('/customers', requireRole('admin', 'staff', 'customer'), asyncHandler(async (req, res) => {
   const { page, pageSize, skip, take } = pagination(req.query);
   const search = String(req.query.search || '').trim();
@@ -35,35 +22,53 @@ router.get('/customers', requireRole('admin', 'staff', 'customer'), asyncHandler
           { companyName: { contains: search, mode: 'insensitive' } },
           { phone: { contains: search, mode: 'insensitive' } },
           { user: { email: { contains: search, mode: 'insensitive' } } },
+          { user: { name: { contains: search, mode: 'insensitive' } } },
         ] }
       : {};
   const [data, total] = await prisma.$transaction([
-    prisma.customer.findMany({ where, include: { user: { select: { id: true, email: true, name: true } } }, orderBy: { createdAt: 'desc' }, skip, take }),
+    prisma.customer.findMany({ where, select: customerSelect, orderBy: { createdAt: 'desc' }, skip, take }),
     prisma.customer.count({ where }),
   ]);
-  return sendSuccess(res, pageResult(data, total, page, pageSize));
+  return sendSuccess(res, pageResult(data.map(serializeCustomer), total, page, pageSize));
 }));
 
 router.post('/customers', staff, asyncHandler(async (req, res) => {
-  const input = customerInput.parse(req.body);
-  const data = await prisma.customer.create({ data: input, include: { user: { select: { id: true, email: true, name: true } } } });
-  return sendSuccess(res, data, 'Customer created.', 201);
+  const input = parseCustomerInput(req.body);
+  const targetUser = await prisma.user.findUnique({
+    where: { id: input.userId },
+    select: { id: true, role: true, status: true },
+  });
+  if (!targetUser) {
+    throw ApiError.badRequest('The specified userId does not exist.');
+  }
+  if (targetUser.role.toLowerCase() !== 'customer') {
+    throw ApiError.badRequest('A customer record can only be linked to an account with the customer role.');
+  }
+  const existingCustomer = await prisma.customer.findUnique({
+    where: { userId: input.userId },
+    select: { id: true },
+  });
+  if (existingCustomer) {
+    throw ApiError.conflict('A customer profile is already linked to this user account.');
+  }
+  const data = await prisma.customer.create({ data: input, select: customerSelect });
+  return sendSuccess(res, serializeCustomer(data), 'Customer created.', 201);
 }));
 
 router.get('/customers/:id', requireRole('admin', 'staff', 'customer'), asyncHandler(async (req, res) => {
   const id = idParam.parse(req.params.id);
   const where = req.user.role.toLowerCase() === 'customer' ? { id, userId: req.user.id } : { id };
-  const customer = await prisma.customer.findFirst({ where, include: { user: { select: { id: true, email: true, name: true } } } });
+  const customer = await prisma.customer.findFirst({ where, select: customerSelect });
   if (!customer) throw ApiError.notFound('Customer not found.');
-  return sendSuccess(res, customer);
+  return sendSuccess(res, serializeCustomer(customer));
 }));
 
 router.patch('/customers/:id', staff, asyncHandler(async (req, res) => {
   const id = idParam.parse(req.params.id);
-  const input = customerInput.partial().omit({ userId: true }).parse(req.body);
+  const input = parseCustomerInput(req.body, true);
   if (Object.keys(input).length === 0) throw ApiError.badRequest('Provide at least one customer field to update.');
-  const customer = await prisma.customer.update({ where: { id }, data: input, include: { user: { select: { id: true, email: true, name: true } } } });
-  return sendSuccess(res, customer, 'Customer updated.');
+  const customer = await prisma.customer.update({ where: { id }, data: input, select: customerSelect });
+  return sendSuccess(res, serializeCustomer(customer), 'Customer updated.');
 }));
 
 const productInput = z.object({

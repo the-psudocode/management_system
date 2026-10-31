@@ -6,6 +6,7 @@ import { requireRole } from '../../middleware/authorize.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/response.js';
 import { asyncHandler, pagination, pageResult } from '../shared/handlers.js';
+import { customerRecordSelect } from '../customers/customerDto.js';
 
 const router = Router();
 const id = z.string().min(1);
@@ -18,7 +19,7 @@ const createInput = z.object({
   autoRenew: z.boolean().default(true),
   items: z.array(z.object({ planId: id, variantId: id.optional(), quantity: z.number().int().positive() })).min(1),
 });
-const subscriptionInclude = { customer: true, items: { include: { product: { select: { id: true, name: true, type: true, description: true } }, plan: true, variant: true } } };
+const subscriptionInclude = { customer: { select: customerRecordSelect }, items: { include: { product: { select: { id: true, name: true, type: true, description: true } }, plan: true, variant: true } } };
 
 const transitions = {
   draft: ['quotation'],
@@ -133,7 +134,7 @@ router.patch('/subscriptions/:id', requireRole('admin', 'staff'), asyncHandler(a
     const current = await tx.subscription.findUnique({ where: { id: subscriptionId } });
     if (!current) throw ApiError.notFound('Subscription not found.');
     if (!['draft', 'quotation'].includes(current.status)) throw ApiError.conflict('Only draft or quotation subscriptions can be edited.');
-    const result = await tx.subscription.update({ where: { id: subscriptionId }, data: input, include: { customer: true, items: true } });
+    const result = await tx.subscription.update({ where: { id: subscriptionId }, data: input, include: { customer: { select: customerRecordSelect }, items: true } });
     await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'subscription.updated', entityType: 'subscription', entityId: subscriptionId, before: { status: current.status }, after: { fields: Object.keys(input) } } });
     return result;
   });
@@ -201,7 +202,7 @@ router.post('/subscriptions/:id/transition', requireRole('admin', 'staff'), asyn
     const changed = await tx.subscription.updateMany({ where: { id: subscriptionId, status: current.status }, data });
     if (changed.count !== 1) throw ApiError.conflict('Subscription changed concurrently; reload and retry.');
     await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'subscription.status_changed', entityType: 'subscription', entityId: subscriptionId, before: { status: current.status }, after: { status: input.to, reason: input.reason || null } } });
-    return tx.subscription.findUnique({ where: { id: subscriptionId }, include: { customer: true, items: true } });
+    return tx.subscription.findUnique({ where: { id: subscriptionId }, include: { customer: { select: customerRecordSelect }, items: true } });
   });
   return sendSuccess(res, updated, `Subscription moved to ${input.to}.`);
 }));
@@ -244,7 +245,7 @@ router.post('/subscriptions/:id/renew', requireRole('admin', 'staff'), asyncHand
           endDate: input.endDate,
         })) },
       },
-      include: { customer: true, items: true },
+      include: { customer: { select: customerRecordSelect }, items: true },
     });
     await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'subscription.renewed', entityType: 'subscription', entityId: result.id, after: { renewedFromId: previous.id } } });
     return result;

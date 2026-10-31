@@ -5,6 +5,7 @@ import { requireRole } from '../../middleware/authorize.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/response.js';
 import { asyncHandler, pagination, pageResult } from '../shared/handlers.js';
+import { customerRecordSelect } from '../customers/customerDto.js';
 
 const router = Router();
 const amount = z.string().regex(/^[1-9]\d*$/, 'Amount must be a positive integer string in paise.').transform(BigInt);
@@ -13,7 +14,7 @@ router.get('/payments', requireRole('admin', 'staff', 'customer'), asyncHandler(
   const { page, pageSize, skip, take } = pagination(req.query);
   const where = req.user.role.toLowerCase() === 'customer' ? { customer: { userId: req.user.id } } : {};
   const [data, total] = await prisma.$transaction([
-    prisma.payment.findMany({ where, include: { customer: true, allocations: { include: { invoice: true } } }, orderBy: { receivedAt: 'desc' }, skip, take }),
+    prisma.payment.findMany({ where, include: { customer: { select: customerRecordSelect }, allocations: { include: { invoice: true } } }, orderBy: { receivedAt: 'desc' }, skip, take }),
     prisma.payment.count({ where }),
   ]);
   return sendSuccess(res, pageResult(data, total, page, pageSize));

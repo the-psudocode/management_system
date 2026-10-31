@@ -7,6 +7,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/response.js';
 import { asyncHandler, pagination, pageResult } from '../shared/handlers.js';
 import { calculateInvoice } from '../billing/calculations.js';
+import { customerRecordSelect } from '../customers/customerDto.js';
 
 const router = Router();
 const id = z.string().min(1);
@@ -43,7 +44,7 @@ router.get('/quotations', requireRole('admin', 'staff', 'customer'), asyncHandle
   const { page, pageSize, skip, take } = pagination(req.query);
   const where = req.user.role.toLowerCase() === 'customer' ? { customer: { userId: req.user.id } } : {};
   const [data, total] = await prisma.$transaction([
-    prisma.quotation.findMany({ where, include: { customer: true, items: { include: { taxes: true } }, subscription: true }, orderBy: { createdAt: 'desc' }, skip, take }),
+    prisma.quotation.findMany({ where, include: { customer: { select: customerRecordSelect }, items: { include: { taxes: true } }, subscription: true }, orderBy: { createdAt: 'desc' }, skip, take }),
     prisma.quotation.count({ where }),
   ]);
   return sendSuccess(res, pageResult(data, total, page, pageSize));
@@ -53,7 +54,7 @@ router.get('/quotations/:id', requireRole('admin', 'staff', 'customer'), asyncHa
   const quotationId = id.parse(req.params.id);
   const quotation = await prisma.quotation.findFirst({
     where: { id: quotationId, ...(req.user.role.toLowerCase() === 'customer' ? { customer: { userId: req.user.id } } : {}) },
-    include: { customer: true, items: { include: { taxes: true } }, subscription: true },
+    include: { customer: { select: customerRecordSelect }, items: { include: { taxes: true } }, subscription: true },
   });
   if (!quotation) throw ApiError.notFound('Quotation not found.');
   return sendSuccess(res, quotation);
@@ -69,7 +70,7 @@ router.post('/quotations', requireRole('admin', 'staff'), asyncHandler(async (re
     items: z.array(itemInput).min(1).optional(),
   }).refine((value) => Boolean(value.templateId) !== Boolean(value.items), 'Provide either templateId or items.').parse(req.body);
 
-  const customer = await prisma.customer.findUnique({ where: { id: input.customerId } });
+  const customer = await prisma.customer.findUnique({ where: { id: input.customerId }, select: customerRecordSelect });
   if (!customer) throw ApiError.notFound('Customer not found.');
   let sourceItems;
   let template = null;
@@ -105,7 +106,7 @@ router.post('/quotations', requireRole('admin', 'staff'), asyncHandler(async (re
   const validUntil = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + validity));
   const taxRules = await prisma.taxRule.findMany({ where: { isActive: true } });
   const originState = process.env.BUSINESS_STATE_CODE || null;
-  const calculation = calculateInvoice({ items: lineItems, discounts: [], taxRules, customerState: customer.billingStateCode, originState, billingDate: now });
+  const calculation = calculateInvoice({ items: lineItems, discounts: [], taxRules, customerState: null, originState, billingDate: now });
   const quoteNumber = `QUO-${now.getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`;
   const quotation = await prisma.$transaction(async (tx) => {
     const result = await tx.quotation.create({
@@ -122,7 +123,7 @@ router.post('/quotations', requireRole('admin', 'staff'), asyncHandler(async (re
         totalPaise: calculation.totalPaise,
         items: { create: calculation.items.map(({ taxes, ...item }) => ({ ...item, taxes: { create: taxes } })) },
       },
-      include: { customer: true, items: { include: { taxes: true } } },
+      include: { customer: { select: customerRecordSelect }, items: { include: { taxes: true } } },
     });
     await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'quotation.created', entityType: 'quotation', entityId: result.id, after: { number: result.number } } });
     return result;
@@ -197,7 +198,7 @@ router.post('/quotations/:id/convert', requireRole('admin', 'staff'), asyncHandl
           endDate: input.endDate,
         })) },
       },
-      include: { customer: true, items: true },
+      include: { customer: { select: customerRecordSelect }, items: true },
     });
     await tx.quotation.update({ where: { id: quotation.id }, data: { status: 'converted' } });
     await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'quotation.converted', entityType: 'quotation', entityId: quotation.id, after: { subscriptionId: result.id } } });

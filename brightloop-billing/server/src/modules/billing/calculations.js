@@ -61,17 +61,18 @@ function eligibleDiscountAmount(discount, invoiceItems, remainingItems) {
 }
 
 function taxRulesForLocation(rules, originState, customerState, billingDate) {
-  const valid = rules.filter((rule) => rule.isActive
+  const inDateRange = rules.filter((rule) => rule.isActive
     && (!rule.validFrom || rule.validFrom <= billingDate)
-    && (!rule.validUntil || rule.validUntil >= billingDate)
-    && (!rule.stateCode || rule.stateCode === customerState));
-  if (valid.length === 0) return [];
+    && (!rule.validUntil || rule.validUntil >= billingDate));
+  if (inDateRange.length === 0) return [];
 
   if (!originState || !customerState) {
-    const generic = valid.filter((rule) => rule.type === 'GST');
+    const generic = inDateRange.filter((rule) => rule.type === 'GST' && !rule.stateCode);
     if (generic.length) return generic;
     throw ApiError.unprocessableEntity('BUSINESS_STATE_CODE and the customer billing state are required for CGST/SGST/IGST calculation.');
   }
+
+  const valid = inDateRange.filter((rule) => !rule.stateCode || rule.stateCode === customerState);
 
   const sameState = originState.toLowerCase() === customerState.toLowerCase();
   if (sameState) {

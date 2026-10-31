@@ -7,11 +7,12 @@ import { ApiError } from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/response.js';
 import { asyncHandler, pagination, pageResult } from '../shared/handlers.js';
 import { addBillingInterval, asDateOnly, calculateInvoice, invoiceDueDate } from './calculations.js';
+import { customerRecordSelect } from '../customers/customerDto.js';
 
 const router = Router();
 const dateInput = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).transform((value) => asDateOnly(`${value}T00:00:00.000Z`));
 const dueSubscriptionInclude = {
-  customer: true,
+  customer: { select: customerRecordSelect },
   items: { include: { product: true, variant: true, plan: true } },
   discounts: { include: { discount: { include: { products: true } } }, orderBy: { appliedAt: 'asc' } },
 };
@@ -56,7 +57,7 @@ async function invoicePreview(tx, subscription, billingDate, originState) {
     items: subscription.items,
     discounts: linked,
     taxRules,
-    customerState: subscription.customer.billingStateCode,
+    customerState: null,
     originState,
     billingDate,
   });
@@ -133,7 +134,7 @@ export async function runBillingDate(billingDate, actorUserId = null) {
           items: subscription.items,
           discounts: claimed,
           taxRules,
-          customerState: subscription.customer.billingStateCode,
+          customerState: null,
           originState,
           billingDate,
         });
@@ -213,7 +214,7 @@ router.get('/invoices', requireRole('admin', 'staff', 'customer'), asyncHandler(
     ...(req.user.role.toLowerCase() === 'customer' ? { customer: { userId: req.user.id } } : {}),
   };
   const [data, total] = await prisma.$transaction([
-    prisma.invoice.findMany({ where, include: { customer: true, items: { include: { taxes: true } }, allocations: { include: { payment: true } } }, orderBy: { createdAt: 'desc' }, skip, take }),
+    prisma.invoice.findMany({ where, include: { customer: { select: customerRecordSelect }, items: { include: { taxes: true } }, allocations: { include: { payment: true } } }, orderBy: { createdAt: 'desc' }, skip, take }),
     prisma.invoice.count({ where }),
   ]);
   return sendSuccess(res, pageResult(data, total, page, pageSize));
@@ -223,7 +224,7 @@ router.get('/invoices/:id', requireRole('admin', 'staff', 'customer'), asyncHand
   const invoiceId = z.string().min(1).parse(req.params.id);
   const invoice = await prisma.invoice.findFirst({
     where: { id: invoiceId, ...(req.user.role.toLowerCase() === 'customer' ? { customer: { userId: req.user.id } } : {}) },
-    include: { customer: true, subscription: true, items: { include: { taxes: true } }, allocations: { include: { payment: true } }, discountRedemptions: { include: { discount: true } } },
+    include: { customer: { select: customerRecordSelect }, subscription: true, items: { include: { taxes: true } }, allocations: { include: { payment: true } }, discountRedemptions: { include: { discount: true } } },
   });
   if (!invoice) throw ApiError.notFound('Invoice not found.');
   return sendSuccess(res, invoice);

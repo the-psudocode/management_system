@@ -212,6 +212,16 @@ describe('Phase 4: Financial Calculation Tests (BigInt Paise Precision & Tax Rul
     assert.equal(taxes[0].taxPaise, 18000n);
   });
 
+  it('rejects location-specific GST when the live customer schema has no billing state', () => {
+    const items = [{ productId: 'prod-1', description: 'Cloud Service', quantity: 1, unitPricePaise: 100000n }];
+    const taxRules = [
+      { name: 'KA CGST', type: 'CGST', rateBps: 900, stateCode: 'KA', isActive: true },
+      { name: 'KA SGST', type: 'SGST', rateBps: 900, stateCode: 'KA', isActive: true },
+    ];
+
+    assert.throws(() => calculateInvoice({ items, discounts: [], taxRules, originState: 'KA', customerState: null, billingDate }), /customer billing state are required/);
+  });
+
   it('8. Tax rounding half-up basis points behavior', () => {
     // 333 paise at 18% (1800 bps)
     // 333 * 1800 = 599,400. (599,400 + 5000) / 10000 = 604,400 / 10000 = 60n
