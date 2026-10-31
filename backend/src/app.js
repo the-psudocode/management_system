@@ -6,6 +6,7 @@ import { notFound, errorHandler } from './middleware/index.js';
 import { sendSuccess } from './utils/response.js';
 import { authRouter } from './modules/auth/index.js';
 import { customerRouter } from './modules/customer/index.js';
+import { productRouter } from './modules/product/index.js';
 
 export const createApp = () => {
   const app = express();
@@ -61,6 +62,9 @@ export const createApp = () => {
 
   // Customer Management Routes
   app.use('/api/customers', customerRouter);
+
+  // Product and Product Variant Management Routes
+  app.use('/api/products', productRouter);
 
   // 404 Not Found Middleware
   app.use(notFound);

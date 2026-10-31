@@ -12,6 +12,7 @@
     "build:frontend": "npm run build --prefix frontend",
     "dev:backend": "npm run dev --prefix backend",
     "start:backend": "npm start --prefix backend",
+    "test": "npm test --prefix backend",
     "test:backend": "npm test --prefix backend",
     "verify:backend": "npm run db:verify --prefix backend",
     "backend": "npm run dev --prefix backend"
