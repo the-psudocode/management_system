@@ -1,43 +1,100 @@
-# Brightloop Billing
+# Management System (Brightloop Billing)
 
-Brightloop Billing is a subscription and recurring-invoice management system. The repository contains a React/Vite admin UI and an Express/Prisma API backed by Neon PostgreSQL.
+A modern billing engine and subscription management platform built with React, Vite, Node.js, and Prisma backed by Neon PostgreSQL.
 
-## Project layout
+## Project Structure
 
-- `src/` — React and TypeScript frontend. Dashboard data is still backed by mock API functions.
-- `brightloop-billing/server/` — Express API, Prisma schema/client, and backend modules.
-- `brightloop-billing/server/docs/backend-architecture.md` — backend model, lifecycle, API, and migration design.
+```text
+management_system/
+├── frontend/                  # React 19 + TypeScript + Vite + Tailwind CSS frontend
+│   ├── src/
+│   │   ├── components/        # Layout (Sidebar, Navbar), common widgets
+│   │   ├── pages/             # Dashboard, Customers, Products, Subscriptions, Invoices, Auth
+│   │   ├── services/          # API service layer
+│   │   ├── data/              # Mock data store
+│   │   ├── types/             # TypeScript data contracts & models
+│   │   └── utils/             # Currency & date formatters
+│   ├── package.json
+│   └── vite.config.ts
+├── brightloop-billing/server/  # Express + Prisma + Neon PostgreSQL backend
+│   ├── src/
+│   │   ├── config/            # Environment & app config
+│   │   ├── database/          # Prisma client with @prisma/adapter-neon
+│   │   ├── middleware/        # Firebase auth, RBAC, error handling
+│   │   ├── modules/           # Catalog, subscriptions, billing, quotations, payments, rules, analytics
+│   │   └── jobs/              # Recurring billing scheduler
+│   ├── prisma/                # schema.prisma & configuration
+│   ├── test/                  # Automated unit and integration test suites
+│   ├── docs/                  # Backend architecture specification
+│   └── package.json
+└── package.json               # Monorepo root runner
+```
 
-## Frontend
+## Getting Started
 
-The root frontend dependencies are already installed in the current workspace.
+### 1. Frontend Development
 
-```sh
+Run the frontend app from the root:
+```bash
+npm run dev
+# or
+npm run dev:frontend
+```
+
+Or directly inside the `frontend` folder:
+```bash
+cd frontend
+npm install
 npm run dev
 ```
 
-## Backend
+Build for production:
+```bash
+npm run build
+```
 
-```sh
+### 2. Backend Development
+
+Run the backend server:
+```bash
+npm run dev:backend
+```
+
+Or directly inside the `brightloop-billing/server` directory:
+```bash
 cd brightloop-billing/server
 npm install
 npm run prisma:generate
 npm run dev
 ```
 
-Copy `.env.example` to `.env` only if a server `.env` does not already exist. Configure `DATABASE_URL` with the pooled Neon URL and `DATABASE_URL_UNPOOLED` with the direct URL. The Prisma CLI reads the direct URL through `prisma.config.ts`.
+To run backend automated test suites:
+```bash
+cd brightloop-billing/server
+npm test
+```
 
-Protected API routes require a Firebase ID token in `Authorization: Bearer <token>`. Set `FIREBASE_PROJECT_ID` and provide Firebase Admin Application Default Credentials in the runtime environment. User roles are loaded from `users.role` in Postgres. Set `BUSINESS_STATE_CODE` to enable India GST component selection.
+### 3. Environment & Configuration
 
-The API health endpoints are `/` and `/api/health`. Versioned business routes use `/api/v1`, including `/customers`, `/products`, `/plans`, `/quotation-templates`, `/quotations`, `/subscriptions`, `/billing/preview`, `/billing/run`, `/invoices`, `/payments`, `/tax-rules`, `/discounts`, and `/analytics/*`.
+Copy `.env.example` to `.env` inside `brightloop-billing/server/` only if a server `.env` does not already exist.
 
-## Database status
+Configure:
+- `DATABASE_URL`: Pooled connection string for runtime queries (`@neondatabase/serverless` with `@prisma/adapter-neon`).
+- `DATABASE_URL_UNPOOLED`: Direct connection string for Prisma CLI.
+- `FIREBASE_PROJECT_ID`: Firebase project identifier for token verification.
+- `BUSINESS_STATE_CODE`: Business origin state code (e.g. `KA`) to calculate Indian GST (CGST/SGST vs IGST).
 
-The Prisma schema and generated client include the existing five tables and the proposed billing models. The live Neon database still has its original five-table schema and has no Prisma migration history. **Do not run `prisma migrate dev`, `prisma migrate deploy`, or `db push` against that database until the baseline and additive migration SQL have been reviewed and tested on a Neon branch.** The API business routes require those migrations before they can use the new models.
+### 4. API Endpoints
 
-## Current implementation limits
+- Health check: `GET /` and `GET /api/health`
+- Versioned API (`/api/v1`):
+  - Catalog: `/customers`, `/products`, `/plans`
+  - Subscriptions & Quotations: `/subscriptions`, `/quotations`, `/quotation-templates`
+  - Billing & Invoicing: `/billing/preview`, `/billing/run`, `/invoices`
+  - Payments: `/payments`
+  - Rules & Taxes: `/tax-rules`, `/discounts`
+  - Analytics: `/analytics/mrr`, `/analytics/churn`, `/analytics/revenue`
 
-- The frontend dashboard still uses mock data and is not yet connected to the API.
-- Billing can be previewed and run with an explicit date through the protected API. An opt-in daily worker is available; set `BILLING_WORKER_ENABLED=true` only after database migrations and billing rules are ready.
-- Quotation/invoice email delivery and printable PDF generation are not configured.
-- Firebase project credentials and `BUSINESS_STATE_CODE` are environment-specific and are not committed.
+## Database Status
+
+The Prisma schema and generated client include both the initial tables and subscription/billing models. The live Neon database currently has the initial core tables. **Do not run destructive migrations or db push against production without testing on an isolated branch.**
