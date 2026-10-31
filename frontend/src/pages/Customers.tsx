@@ -24,8 +24,8 @@ import {
 	getCustomerInvoices,
 } from "../services/api";
 import {
-	formatDate,
 	formatCurrency,
+	formatDate,
 	getStatusBadgeClass,
 } from "../utils/format";
 
@@ -106,7 +106,9 @@ export const Customers: React.FC = () => {
 			state: c.state,
 			pincode: c.pincode,
 			gstin: c.gstin,
-			status: c.status,
+			status: (c.status === "inactive" ? "inactive" : "active") as
+				| "active"
+				| "inactive",
 		});
 	};
 
@@ -761,4 +763,4 @@ export const Customers: React.FC = () => {
 	);
 };
 
-export default Customers;
+export const CustomersPage = Customers;

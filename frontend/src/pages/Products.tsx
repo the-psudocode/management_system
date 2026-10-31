@@ -157,8 +157,11 @@ export const Products: React.FC = () => {
 				name: formData.name,
 				description: formData.description,
 				category: formData.category,
-				basePriceInPaise,
-				variants: parsedVariants,
+				status: formData.isActive ? "active" : "inactive",
+				basePriceInPaise: Math.round(
+					parseFloat(formData.basePriceInRupees || "0") * 100,
+				),
+				variants: (formData as any).variants || [],
 				isActive: formData.isActive,
 			});
 
@@ -763,4 +766,4 @@ export const Products: React.FC = () => {
 	);
 };
 
-export default Products;
+export const ProductsPage = Products;

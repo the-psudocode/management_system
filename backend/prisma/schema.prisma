@@ -1,6 +1,5 @@
-// Prisma ORM 7 Schema
-// Note: In Prisma 7, connection URLs are configured in prisma.config.ts (CLI)
-// and via the runtime adapter in code, intentionally omitting the url property here.
+// Prisma ORM 7 schema. Connection URLs are configured in prisma.config.ts
+// for CLI commands and with PrismaNeon in src/database/prisma.js at runtime.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,4 +8,516 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum SubscriptionStatus {
+  draft
+  quotation
+  confirmed
+  active
+  paused
+  closed
+
+  @@map("subscription_status")
+}
+
+enum QuotationStatus {
+  draft
+  sent
+  accepted
+  declined
+  expired
+  converted
+
+  @@map("quotation_status")
+}
+
+enum InvoiceStatus {
+  draft
+  confirmed
+  partially_paid
+  paid
+  overdue
+  cancelled
+
+  @@map("invoice_status")
+}
+
+enum TaxType {
+  CGST
+  SGST
+  IGST
+  GST
+}
+
+enum DiscountType {
+  fixed
+  percentage
+
+  @@map("discount_type")
+}
+
+enum PaymentMethod {
+  upi
+  bank_transfer
+  card
+  cash
+  cheque
+  other
+
+  @@map("payment_method")
+}
+
+model User {
+  id          String    @id @default(cuid())
+  firebaseUid String    @unique(map: "users_firebase_uid_key") @map("firebase_uid") @db.VarChar
+  email       String    @unique(map: "users_email_key") @db.VarChar
+  name        String    @db.VarChar
+  role        String    @db.VarChar
+  status      String    @default("active") @db.VarChar
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer    Customer?
+  auditLogs   AuditLog[]
+
+  @@index([role], map: "idx_users_role")
+  @@map("users")
+}
+
+model Customer {
+  id                   String         @id @default(cuid())
+  userId               String         @unique(map: "customers_user_id_key") @map("user_id")
+  companyName          String?        @map("company_name") @db.VarChar
+  phone                String?        @db.VarChar
+  billingAddress       String?        @map("billing_address")
+  billingCity          String?        @map("billing_city") @db.VarChar
+  billingStateCode     String?        @map("billing_state_code") @db.VarChar
+  postalCode           String?        @map("postal_code") @db.VarChar
+  gstin                String?        @db.VarChar
+  accountBalancePaise  BigInt         @default(0) @map("account_balance_paise")
+  creditLimitPaise     BigInt         @default(0) @map("credit_limit_paise")
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade, map: "fk_customers_user")
+  subscriptions        Subscription[]
+  quotations           Quotation[]
+  invoices             Invoice[]
+  payments             Payment[]
+
+  @@map("customers")
+}
+
+model Product {
+  id          String           @id @default(cuid())
+  name        String           @db.VarChar
+  type        String           @default("service") @db.VarChar
+  description String?
+  salesPricePaise BigInt       @default(0) @map("sales_price_paise")
+  costPricePaise  BigInt       @default(0) @map("cost_price_paise")
+  status      String           @default("active") @db.VarChar
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  variants    ProductVariant[]
+  plans       SubscriptionPlan[]
+  subscriptionItems SubscriptionItem[]
+  quotationItems    QuotationItem[]
+  invoiceItems      InvoiceItem[]
+  discountProducts  DiscountProduct[]
+  templateItems     QuotationTemplateItem[]
+
+  @@map("products")
+}
+
+model ProductVariant {
+  id         String             @id @default(cuid())
+  productId  String             @map("product_id")
+  sku        String             @unique(map: "product_variants_sku_key") @db.VarChar
+  name       String             @db.VarChar
+  pricePaise BigInt             @map("price_paise")
+  currency   String             @default("INR") @db.VarChar
+  createdAt  DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  product    Product            @relation(fields: [productId], references: [id], onDelete: Cascade, map: "fk_variants_product")
+  planItems  SubscriptionItem[]
+  quoteItems QuotationItem[]
+  invoiceItems InvoiceItem[]
+
+  @@index([productId], map: "idx_product_variants_product_id")
+  @@map("product_variants")
+}
+
+model SubscriptionPlan {
+  id              String             @id @default(cuid())
+  productId       String             @map("product_id")
+  name            String             @db.VarChar
+  billingInterval String             @map("billing_interval") @db.VarChar
+  intervalCount   Int                @default(1) @map("interval_count")
+  amountPaise     BigInt             @map("amount_paise")
+  currency        String             @default("INR") @db.VarChar
+  status          String             @default("active") @db.VarChar
+  description     String?
+  minimumQuantity Int                @default(1) @map("minimum_quantity")
+  availableFrom   DateTime?          @map("available_from") @db.Date
+  availableUntil  DateTime?          @map("available_until") @db.Date
+  autoClose       Boolean            @default(false) @map("auto_close")
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  product         Product            @relation(fields: [productId], references: [id], onDelete: Cascade, map: "fk_plans_product")
+  subscriptionItems SubscriptionItem[]
+  quotationItems    QuotationItem[]
+  templateItems     QuotationTemplateItem[]
+
+  @@index([productId], map: "idx_subscription_plans_product_id")
+  @@map("subscription_plans")
+}
+
+model QuotationTemplate {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  validDays   Int             @default(30) @map("valid_days")
+  isActive    Boolean         @default(true) @map("is_active")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  items       QuotationTemplateItem[]
+  quotations  Quotation[]
+
+  @@map("quotation_templates")
+}
+
+model QuotationTemplateItem {
+  id          String           @id @default(cuid())
+  templateId  String           @map("template_id")
+  productId   String           @map("product_id")
+  planId      String?          @map("plan_id")
+  quantity    Int              @default(1)
+  template    QuotationTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  product     Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  plan        SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([templateId])
+  @@map("quotation_template_items")
+}
+
+model Quotation {
+  id             String          @id @default(cuid())
+  number         String          @unique
+  customerId     String          @map("customer_id")
+  templateId     String?         @map("template_id")
+  status         QuotationStatus @default(draft)
+  currency       String          @default("INR")
+  paymentTerms   String?         @map("payment_terms")
+  issuedAt       DateTime        @default(now()) @map("issued_at") @db.Timestamptz(6)
+  validUntil     DateTime        @map("valid_until") @db.Date
+  subtotalPaise  BigInt          @map("subtotal_paise")
+  taxPaise       BigInt          @default(0) @map("tax_paise")
+  discountPaise  BigInt          @default(0) @map("discount_paise")
+  totalPaise     BigInt          @map("total_paise")
+  notes          String?
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer       Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  template       QuotationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  items          QuotationItem[]
+  subscription   Subscription?
+
+  @@index([customerId, status])
+  @@index([validUntil, status])
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id                String           @id @default(cuid())
+  quotationId       String           @map("quotation_id")
+  productId         String           @map("product_id")
+  variantId         String?          @map("variant_id")
+  planId            String?          @map("plan_id")
+  description       String
+  quantity          Int
+  unitPricePaise    BigInt           @map("unit_price_paise")
+  discountPaise     BigInt           @default(0) @map("discount_paise")
+  taxPaise          BigInt           @default(0) @map("tax_paise")
+  totalPaise        BigInt           @map("total_paise")
+  quotation         Quotation        @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product           Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant           ProductVariant?  @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  plan              SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  taxes             QuotationItemTax[]
+
+  @@index([quotationId])
+  @@map("quotation_items")
+}
+
+model QuotationItemTax {
+  id             String        @id @default(cuid())
+  quotationItemId String       @map("quotation_item_id")
+  name           String
+  type           TaxType
+  rateBps        Int           @map("rate_bps")
+  taxablePaise   BigInt        @map("taxable_paise")
+  taxPaise       BigInt        @map("tax_paise")
+  quotationItem  QuotationItem @relation(fields: [quotationItemId], references: [id], onDelete: Cascade)
+
+  @@index([quotationItemId])
+  @@map("quotation_item_taxes")
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  number             String             @unique
+  customerId         String             @map("customer_id")
+  sourceQuotationId  String?            @unique @map("source_quotation_id")
+  renewedFromId      String?            @unique @map("renewed_from_id")
+  status             SubscriptionStatus @default(draft)
+  billingInterval    String             @map("billing_interval")
+  intervalCount      Int                @default(1) @map("interval_count")
+  currency           String             @default("INR")
+  paymentTerms       String?            @map("payment_terms")
+  startDate          DateTime?          @map("start_date") @db.Date
+  endDate            DateTime?          @map("end_date") @db.Date
+  nextBillingDate    DateTime?          @map("next_billing_date") @db.Date
+  autoRenew          Boolean            @default(true) @map("auto_renew")
+  autoClose          Boolean            @default(false) @map("auto_close")
+  pausedAt           DateTime?          @map("paused_at") @db.Timestamptz(6)
+  closedAt           DateTime?          @map("closed_at") @db.Timestamptz(6)
+  closeReason        String?            @map("close_reason")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer           Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  sourceQuotation    Quotation?         @relation(fields: [sourceQuotationId], references: [id], onDelete: SetNull)
+  renewedFrom        Subscription?      @relation("SubscriptionRenewal", fields: [renewedFromId], references: [id], onDelete: Restrict)
+  renewal            Subscription?      @relation("SubscriptionRenewal")
+  items              SubscriptionItem[]
+  billingPeriods     BillingPeriod[]
+  invoices           Invoice[]
+  discounts          SubscriptionDiscount[]
+
+  @@index([customerId, status])
+  @@index([status, nextBillingDate])
+  @@map("subscriptions")
+}
+
+model SubscriptionItem {
+  id              String          @id @default(cuid())
+  subscriptionId  String          @map("subscription_id")
+  productId       String          @map("product_id")
+  variantId       String?         @map("variant_id")
+  planId          String          @map("plan_id")
+  description     String
+  quantity        Int
+  unitPricePaise  BigInt          @map("unit_price_paise")
+  startDate       DateTime?       @map("start_date") @db.Date
+  endDate         DateTime?       @map("end_date") @db.Date
+  subscription    Subscription    @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([subscriptionId])
+  @@map("subscription_items")
+}
+
+model TaxRule {
+  id          String    @id @default(cuid())
+  name        String
+  type        TaxType
+  rateBps     Int       @map("rate_bps")
+  scope       String    @default("all_products")
+  stateCode   String?   @map("state_code")
+  validFrom   DateTime? @map("valid_from") @db.Date
+  validUntil  DateTime? @map("valid_until") @db.Date
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([isActive, validFrom, validUntil])
+  @@map("tax_rules")
+}
+
+model Discount {
+  id                  String            @id @default(cuid())
+  code                String            @unique
+  description         String?
+  type                DiscountType
+  value               BigInt
+  currency            String            @default("INR")
+  minimumPurchasePaise BigInt?           @map("minimum_purchase_paise")
+  minimumQuantity     Int?              @map("minimum_quantity")
+  startsAt            DateTime          @map("starts_at") @db.Date
+  endsAt              DateTime          @map("ends_at") @db.Date
+  maxUses             Int?              @map("max_uses")
+  usedCount           Int               @default(0) @map("used_count")
+  wholeSubscription   Boolean           @default(false) @map("whole_subscription")
+  isActive            Boolean           @default(true) @map("is_active")
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  products            DiscountProduct[]
+  redemptions         DiscountRedemption[]
+  subscriptions       SubscriptionDiscount[]
+
+  @@index([isActive, startsAt, endsAt])
+  @@map("discounts")
+}
+
+model DiscountProduct {
+  discountId String   @map("discount_id")
+  productId  String   @map("product_id")
+  discount   Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@id([discountId, productId])
+  @@index([productId])
+  @@map("discount_products")
+}
+
+model SubscriptionDiscount {
+  subscriptionId String       @map("subscription_id")
+  discountId     String       @map("discount_id")
+  appliedAt      DateTime     @default(now()) @map("applied_at") @db.Timestamptz(6)
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  discount       Discount     @relation(fields: [discountId], references: [id], onDelete: Restrict)
+
+  @@id([subscriptionId, discountId])
+  @@map("subscription_discounts")
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  number           String        @unique
+  customerId       String        @map("customer_id")
+  subscriptionId   String        @map("subscription_id")
+  billingPeriodId  String        @map("billing_period_id")
+  revision         Int           @default(1)
+  status           InvoiceStatus @default(draft)
+  currency         String        @default("INR")
+  billingPeriodStart DateTime    @map("billing_period_start") @db.Date
+  billingPeriodEnd DateTime      @map("billing_period_end") @db.Date
+  issuedAt         DateTime?     @map("issued_at") @db.Timestamptz(6)
+  dueDate          DateTime      @map("due_date") @db.Date
+  subtotalPaise    BigInt        @map("subtotal_paise")
+  taxPaise         BigInt        @default(0) @map("tax_paise")
+  discountPaise    BigInt        @default(0) @map("discount_paise")
+  totalPaise       BigInt        @map("total_paise")
+  amountPaidPaise  BigInt        @default(0) @map("amount_paid_paise")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer         Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  subscription     Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  billingPeriod    BillingPeriod @relation(fields: [billingPeriodId], references: [id], onDelete: Restrict)
+  items            InvoiceItem[]
+  allocations      PaymentAllocation[]
+  discountRedemptions DiscountRedemption[]
+
+  @@unique([billingPeriodId, revision], map: "invoices_period_revision_key")
+  @@index([customerId, status, dueDate])
+  @@index([status, dueDate])
+  @@map("invoices")
+}
+
+model BillingPeriod {
+  id            String       @id @default(cuid())
+  subscriptionId String      @map("subscription_id")
+  periodStart   DateTime     @map("period_start") @db.Date
+  periodEnd     DateTime     @map("period_end") @db.Date
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  subscription  Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  invoices      Invoice[]
+
+  @@unique([subscriptionId, periodStart, periodEnd], map: "billing_period_subscription_dates_key")
+  @@index([subscriptionId, periodStart])
+  @@map("billing_periods")
+}
+
+model InvoiceItem {
+  id              String              @id @default(cuid())
+  invoiceId       String              @map("invoice_id")
+  productId       String?             @map("product_id")
+  variantId       String?             @map("variant_id")
+  description     String
+  quantity        Int
+  unitPricePaise  BigInt              @map("unit_price_paise")
+  discountPaise   BigInt              @default(0) @map("discount_paise")
+  taxPaise        BigInt              @default(0) @map("tax_paise")
+  totalPaise      BigInt              @map("total_paise")
+  invoice         Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product         Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant         ProductVariant?     @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  taxes           InvoiceItemTax[]
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model InvoiceItemTax {
+  id            String      @id @default(cuid())
+  invoiceItemId String      @map("invoice_item_id")
+  name          String
+  type          TaxType
+  rateBps       Int         @map("rate_bps")
+  taxablePaise  BigInt      @map("taxable_paise")
+  taxPaise      BigInt      @map("tax_paise")
+  invoiceItem   InvoiceItem @relation(fields: [invoiceItemId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceItemId])
+  @@map("invoice_item_taxes")
+}
+
+model DiscountRedemption {
+  discountId String   @map("discount_id")
+  invoiceId  String   @map("invoice_id")
+  amountPaise BigInt  @map("amount_paise")
+  redeemedAt DateTime @default(now()) @map("redeemed_at") @db.Timestamptz(6)
+  discount   Discount @relation(fields: [discountId], references: [id], onDelete: Restrict)
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@id([discountId, invoiceId])
+  @@index([invoiceId])
+  @@map("discount_redemptions")
+}
+
+model Payment {
+  id          String             @id @default(cuid())
+  customerId  String             @map("customer_id")
+  method      PaymentMethod
+  amountPaise BigInt             @map("amount_paise")
+  currency    String             @default("INR")
+  reference   String?
+  receivedAt  DateTime           @map("received_at") @db.Timestamptz(6)
+  notes       String?
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  customer    Customer           @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  allocations PaymentAllocation[]
+
+  @@index([customerId, receivedAt])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  paymentId  String   @map("payment_id")
+  invoiceId  String   @map("invoice_id")
+  amountPaise BigInt  @map("amount_paise")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  payment    Payment  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@id([paymentId, invoiceId])
+  @@index([invoiceId])
+  @@map("payment_allocations")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  requestId   String?  @map("request_id")
+  before      Json?
+  after       Json?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  actor       User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_logs")
 }
