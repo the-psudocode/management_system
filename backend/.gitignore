@@ -9,4 +9,12 @@ node_modules/
 dist/
 build/
 .DS_Store
-*.json
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Firebase private credentials
+serviceAccountKey.json
+firebase-credentials/
