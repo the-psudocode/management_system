@@ -14,7 +14,7 @@ import {
 	Printer,
 } from "lucide-react";
 import { apiService } from "../services/api";
-import { Invoice, Customer, Payment } from "../types";
+import type { Invoice, Customer, Payment } from "../types";
 import {
 	formatCurrency,
 	formatDate,
@@ -518,7 +518,7 @@ export const InvoicesPage: React.FC = () => {
 									</tr>
 								</thead>
 								<tbody className="divide-y divide-gray-100">
-									{selectedInvoice.items.map((item) => (
+									{(selectedInvoice.items || []).map((item: any) => (
 										<tr key={item.id}>
 											<td className="p-2 font-medium text-gray-900">
 												{item.description}
@@ -926,3 +926,5 @@ export const InvoicesPage: React.FC = () => {
 		</div>
 	);
 };
+
+export const Invoices = InvoicesPage;

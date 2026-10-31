@@ -136,6 +136,7 @@ export function calculateInvoice({ items, discounts, taxRules, customerState, bi
     return {
       productId: item.productId,
       variantId: item.variantId,
+      planId: item.planId || null,
       description: item.description,
       quantity: item.quantity,
       unitPricePaise: item.unitPricePaise,

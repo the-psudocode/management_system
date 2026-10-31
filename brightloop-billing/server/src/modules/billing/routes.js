@@ -156,7 +156,12 @@ export async function runBillingDate(billingDate, actorUserId = null) {
             discountPaise: calculation.discountPaise,
             totalPaise: calculation.totalPaise,
             status: 'draft',
-            items: { create: calculation.items.map(({ taxes, ...item }) => ({ ...item, taxes: { create: taxes } })) },
+            items: { create: calculation.items.map(({ taxes, planId, productId, variantId, ...item }) => ({
+              ...item,
+              ...(productId ? { product: { connect: { id: productId } } } : {}),
+              ...(variantId ? { variant: { connect: { id: variantId } } } : {}),
+              taxes: { create: taxes },
+            })) },
             discountRedemptions: { create: calculation.appliedDiscounts.map((discount) => ({ discountId: discount.discountId, amountPaise: discount.amountPaise })) },
           },
         });

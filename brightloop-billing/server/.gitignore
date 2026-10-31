@@ -10,4 +10,7 @@ dist/
 build/
 src/generated/
 .DS_Store
+*firebase*.json
+serviceAccountKey.json
+
 
