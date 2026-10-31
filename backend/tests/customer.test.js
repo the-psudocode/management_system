@@ -5,6 +5,7 @@ import { checkDatabaseHealth, query, closeDatabase } from '../src/database/index
 import { authService } from '../src/modules/auth/auth.service.js';
 import { customerService } from '../src/modules/customer/customer.service.js';
 import auth, { setFirebaseAuth, resetFirebaseAuth, MockFirebaseAuth } from '../src/config/firebase.js';
+import { cleanDatabase } from './helpers.js';
 
 describe('Brightloop Billing - Customer CRUD Integration Suite', () => {
   let app;
@@ -39,7 +40,7 @@ describe('Brightloop Billing - Customer CRUD Integration Suite', () => {
     }
 
     // Clean test state for idempotent test runs
-    await query('DELETE FROM customers; DELETE FROM users;');
+    await cleanDatabase();
 
     // Start HTTP server on dynamic port
     await new Promise((resolve) => {

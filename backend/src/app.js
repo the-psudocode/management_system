@@ -7,6 +7,10 @@ import { sendSuccess } from './utils/response.js';
 import { authRouter } from './modules/auth/index.js';
 import { customerRouter } from './modules/customer/index.js';
 import { productRouter } from './modules/product/index.js';
+import { planRouter } from './modules/plan/index.js';
+import { quotationRouter } from './modules/quotation/index.js';
+import { paymentRouter } from './modules/payment/index.js';
+import { portalRouter } from './modules/portal/index.js';
 
 export const createApp = () => {
   const app = express();
@@ -65,6 +69,19 @@ export const createApp = () => {
 
   // Product and Product Variant Management Routes
   app.use('/api/products', productRouter);
+
+  // Subscription Plan Management Routes
+  app.use('/api/plans', planRouter);
+  app.use('/api/subscription-plans', planRouter);
+
+  // Quotation Management Routes
+  app.use('/api/quotations', quotationRouter);
+
+  // Payment Management Routes
+  app.use('/api/payments', paymentRouter);
+
+  // Customer Portal Routes
+  app.use('/api/portal', portalRouter);
 
   // 404 Not Found Middleware
   app.use(notFound);

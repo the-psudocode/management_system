@@ -5,6 +5,7 @@ import { checkDatabaseHealth, query, closeDatabase } from '../src/database/index
 import { authService } from '../src/modules/auth/auth.service.js';
 import { productService } from '../src/modules/product/product.service.js';
 import auth, { setFirebaseAuth, resetFirebaseAuth, MockFirebaseAuth } from '../src/config/firebase.js';
+import { cleanDatabase } from './helpers.js';
 
 const uid = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
@@ -39,7 +40,7 @@ describe('Brightloop Billing - Product & Variant Management Suite', () => {
     }
 
     // Clean test state for idempotent test runs
-    await query('DELETE FROM product_variants; DELETE FROM products; DELETE FROM customers; DELETE FROM users;');
+    await cleanDatabase();
 
     // Start HTTP server on dynamic port
     await new Promise((resolve) => {
