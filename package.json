@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "npm start --prefix backend",
+    "dev": "npm run dev --prefix backend",
+    "test": "npm test --prefix backend",
+    "db:verify": "npm run db:verify --prefix backend"
   },
   "repository": {
     "type": "git",
