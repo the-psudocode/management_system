@@ -55,6 +55,7 @@ router.get('/analytics/dashboard', requireRole('admin', 'staff'), asyncHandler(a
         WHEN LOWER(s.billing_interval) IN ('daily','day') THEN 30.0 / s.interval_count
         WHEN LOWER(s.billing_interval) IN ('weekly','week') THEN 4.345 / s.interval_count
         WHEN LOWER(s.billing_interval) = 'quarterly' THEN 1.0 / (3 * s.interval_count)
+        WHEN LOWER(s.billing_interval) = 'half_yearly' THEN 1.0 / (6 * s.interval_count)
         WHEN LOWER(s.billing_interval) IN ('yearly','year') THEN 1.0 / (12 * s.interval_count)
         WHEN LOWER(s.billing_interval) IN ('monthly','month') THEN 1.0 / s.interval_count
         ELSE 0 END)), 0)::bigint AS mrr_paise

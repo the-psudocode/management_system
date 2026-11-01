@@ -32,6 +32,9 @@ function MainLayout() {
 	const isPortalPath = location.pathname === "/portal" || location.pathname.startsWith("/portal/");
 	if (profile.role === "customer" && !isPortalPath) return <Navigate to="/portal" replace />;
 	if (profile.role !== "customer" && isPortalPath) return <Navigate to="/dashboard" replace />;
+	if (profile.role !== "admin" && location.pathname === "/staff-management") return <Navigate to="/dashboard" replace />;
+	if (profile.role !== "admin" && location.pathname === "/billing-rules") return <Navigate to="/dashboard" replace />;
+	if (profile.role !== "admin" && location.pathname === "/accounts") return <Navigate to="/dashboard" replace />;
 
   return (
     <div className="app-shell flex min-h-screen bg-[#f6f7f2] text-stone-900">

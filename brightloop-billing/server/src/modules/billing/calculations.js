@@ -30,6 +30,8 @@ export function addBillingInterval(value, interval, count = 1, anchorDay = null)
       return date;
     case 'quarterly':
       return addMonthsClamped(date, amount * 3, effectiveAnchorDay);
+    case 'half_yearly':
+      return addMonthsClamped(date, amount * 6, effectiveAnchorDay);
     case 'monthly':
     case 'month':
       return addMonthsClamped(date, amount, effectiveAnchorDay);

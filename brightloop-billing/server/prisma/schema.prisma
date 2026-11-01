@@ -93,6 +93,7 @@ model Customer {
   billingCity          String?        @map("billing_city") @db.VarChar
   billingStateCode     String?        @map("billing_state_code") @db.VarChar
   postalCode           String?        @map("postal_code") @db.VarChar
+  billingCountry       String?        @map("billing_country") @db.VarChar
   gstin                String?        @db.VarChar
   accountBalancePaise  BigInt         @default(0) @map("account_balance_paise")
   creditLimitPaise     BigInt         @default(0) @map("credit_limit_paise")

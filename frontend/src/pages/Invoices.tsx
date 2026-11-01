@@ -12,8 +12,12 @@ import {
 	Clock,
 	X,
 	Printer,
+	PlayCircle,
+	Send,
+	Ban,
+	LoaderCircle,
 } from "lucide-react";
-import { apiService } from "../services/api";
+import { apiService, getCurrentUserProfile } from "../services/api";
 import type { Invoice, Customer, Payment } from "../types";
 import {
 	formatCurrency,
@@ -22,11 +26,17 @@ import {
 } from "../utils/format";
 
 export const InvoicesPage: React.FC = () => {
+	const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 	const [invoices, setInvoices] = useState<Invoice[]>([]);
 	const [customers, setCustomers] = useState<Customer[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState<string>("all");
+	const [role, setRole] = useState<"admin" | "staff" | "customer">("staff");
+	const [billingDate, setBillingDate] = useState(today);
+	const [billingPreview, setBillingPreview] = useState<any | null>(null);
+	const [billingBusy, setBillingBusy] = useState(false);
+	const [billingMessage, setBillingMessage] = useState("");
 
 	// Selected Invoice Detail View
 	const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(
@@ -63,24 +73,54 @@ export const InvoicesPage: React.FC = () => {
 	]);
 	const [createSubmitting, setCreateSubmitting] = useState(false);
 
-	useEffect(() => {
-		fetchData();
-	}, [statusFilter, searchQuery]);
+	useEffect(() => { void fetchData(); }, []);
 
 	const fetchData = async () => {
 		setLoading(true);
 		try {
-			const [invData, custData] = await Promise.all([
-				apiService.getInvoices(statusFilter, undefined, searchQuery),
+			const [invData, custData, profile] = await Promise.all([
+				apiService.getInvoices("all"),
 				apiService.getCustomers(),
+				getCurrentUserProfile(),
 			]);
 			setInvoices(invData);
 			setCustomers(custData);
+			setRole(profile.role);
 		} catch (err) {
 			console.error("Failed to load invoices:", err);
 		} finally {
 			setLoading(false);
 		}
+	};
+
+	const handlePreviewBilling = async () => {
+		setBillingBusy(true); setBillingMessage("");
+		try { setBillingPreview(await apiService.previewBilling(billingDate)); }
+		catch (error: any) { setBillingMessage(error.message || "Could not preview the billing run."); }
+		finally { setBillingBusy(false); }
+	};
+
+	const handleRunBilling = async () => {
+		if (!window.confirm(`Generate invoices for every active subscription due on or before ${billingDate}? Existing billing periods will be skipped.`)) return;
+		setBillingBusy(true); setBillingMessage("");
+		try {
+			const result = await apiService.runBilling(billingDate);
+			setBillingMessage(`Billing run complete: ${result.createdCount} invoice(s) generated, ${result.skipped?.length || 0} already handled, ${result.failedCount || 0} failed. ${result.overdueMarked || 0} invoice(s) marked overdue.`);
+			setBillingPreview(null);
+			await fetchData();
+		} catch (error: any) { setBillingMessage(error.message || "Billing run failed."); }
+		finally { setBillingBusy(false); }
+	};
+
+	const handleConfirmInvoice = async (invoice: Invoice) => {
+		try { await apiService.confirmInvoice(invoice.id); await fetchData(); }
+		catch (error: any) { setBillingMessage(error.message || "Could not confirm invoice."); }
+	};
+
+	const handleCancelInvoice = async (invoice: Invoice) => {
+		if (!window.confirm(`Cancel invoice ${invoice.invoiceNumber}? Its billing period will become eligible for a new billing run.`)) return;
+		try { await apiService.cancelInvoice(invoice.id); await fetchData(); }
+		catch (error: any) { setBillingMessage(error.message || "Could not cancel invoice."); }
 	};
 
 	const handleOpenDetail = async (invoice: Invoice) => {
@@ -98,7 +138,7 @@ export const InvoicesPage: React.FC = () => {
 	const handleOpenRecordPayment = (invoice: Invoice) => {
 		setPaymentInvoice(invoice);
 		setPaymentAmountRupees((invoice.balanceDuePaise / 100).toString());
-		setPaymentRef(`UTR-${Math.floor(10000000 + Math.random() * 90000000)}`);
+		setPaymentRef("");
 		setPaymentError(null);
 		setIsPaymentModalOpen(true);
 	};
@@ -198,13 +238,20 @@ export const InvoicesPage: React.FC = () => {
 		}
 	};
 
-	const totalInvoiced = invoices.reduce((acc, i) => acc + i.totalPaise, 0);
-	const totalPaid = invoices.reduce((acc, i) => acc + i.paidAmountPaise, 0);
+	const billableInvoices = invoices.filter((i) => !["cancelled", "void"].includes(i.status));
+	const totalInvoiced = billableInvoices.reduce((acc, i) => acc + i.totalPaise, 0);
+	const totalPaid = billableInvoices.reduce((acc, i) => acc + i.paidAmountPaise, 0);
 	const totalOutstanding = invoices.reduce(
 		(acc, i) => acc + i.balanceDuePaise,
 		0,
 	);
 	const overdueCount = invoices.filter((i) => i.status === "overdue").length;
+	const filteredInvoices = invoices.filter((invoice) => {
+		const query = searchQuery.trim().toLowerCase();
+		const matchesSearch = !query || `${invoice.invoiceNumber} ${invoice.customerName} ${invoice.customerEmail || ""}`.toLowerCase().includes(query);
+		const matchesView = statusFilter === "all" || (statusFilter === "generated" ? Boolean(invoice.subscriptionId) : statusFilter === "pending" ? ["confirmed", "partially_paid", "sent"].includes(invoice.status) : invoice.status === statusFilter);
+		return matchesSearch && matchesView;
+	});
 
 	return (
 		<div className="p-6 space-y-6">
@@ -215,31 +262,25 @@ export const InvoicesPage: React.FC = () => {
 						Invoice Management
 					</h1>
 					<p className="text-sm text-gray-500">
-						Track invoices, issue billing records, and process
-						payments
+						Issue customer invoices, track balances, and record payments received.
 					</p>
 				</div>
-				<button
-					onClick={() => setIsCreateModalOpen(true)}
-					className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium text-sm shadow-sm"
-				>
-					<Plus className="w-4 h-4 mr-2" />
-					Create Invoice
-				</button>
+				{role === "admin" && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-stone-200 bg-white p-2 shadow-sm"><label htmlFor="billing-date" className="sr-only">Billing date</label><input id="billing-date" type="date" value={billingDate} onChange={(event) => { setBillingDate(event.target.value); setBillingPreview(null); }} className="rounded-lg border border-stone-200 px-3 py-2 text-sm"/><button disabled={billingBusy} onClick={() => void handlePreviewBilling()} className="inline-flex items-center gap-1.5 rounded-lg border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 disabled:opacity-50"><Search size={15}/> Preview due</button><button disabled={billingBusy || !billingPreview?.count} onClick={() => void handleRunBilling()} className="inline-flex items-center gap-1.5 rounded-lg bg-[#263b2d] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{billingBusy ? <LoaderCircle size={15} className="animate-spin"/> : <PlayCircle size={15}/>} Run billing</button></div>}
 			</div>
+			{(billingMessage || billingPreview) && <section className="rounded-xl border border-[#dce5d8] bg-[#f7f8f4] p-4 text-sm text-stone-700" aria-live="polite">{billingMessage && <p>{billingMessage}</p>}{billingPreview && <div className="mt-1"><p className="font-semibold">Preview · {billingPreview.count} invoice(s) due for {billingPreview.billingDate}</p><div className="mt-2 max-h-48 space-y-1 overflow-y-auto">{billingPreview.invoices.map((invoice: any) => <div key={invoice.subscriptionId} className="flex justify-between gap-4 border-t border-stone-200 py-1.5"><span>{invoice.customerName} · {invoice.subscriptionNumber} <span className="text-stone-500">({formatDate(invoice.billingPeriodStart)}–{formatDate(invoice.billingPeriodEnd)})</span></span><strong>{formatCurrency(Number(invoice.totalPaise || 0))}</strong></div>)}</div></div>}</section>}
 
 			{/* Metric Cards */}
 			<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 				<div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
 					<div className="flex justify-between items-center text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2">
-						<span>Total Invoiced</span>
+						<span>Invoices · {invoices.length}</span>
 						<FileText className="w-4 h-4 text-indigo-500" />
 					</div>
 					<div className="text-2xl font-bold text-gray-900">
 						{formatCurrency(totalInvoiced)}
 					</div>
 					<div className="text-xs text-gray-400 mt-1">
-						{invoices.length} invoices
+						All billing periods
 					</div>
 				</div>
 
@@ -303,19 +344,7 @@ export const InvoicesPage: React.FC = () => {
 					<span className="text-xs font-medium text-gray-500 uppercase">
 						Status:
 					</span>
-					<select
-						value={statusFilter}
-						onChange={(e) => setStatusFilter(e.target.value)}
-						className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
-					>
-						<option value="all">All Invoices</option>
-						<option value="draft">Draft</option>
-						<option value="sent">Sent</option>
-						<option value="paid">Paid</option>
-						<option value="partially_paid">Partially Paid</option>
-						<option value="overdue">Overdue</option>
-						<option value="void">Void</option>
-					</select>
+					<select aria-label="Billing view" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"><option value="all">All bills ({invoices.length})</option><option value="generated">Generated ({invoices.filter((i) => i.subscriptionId).length})</option><option value="draft">Draft ({invoices.filter((i) => i.status === "draft").length})</option><option value="pending">Pending ({invoices.filter((i) => ["confirmed", "partially_paid", "sent"].includes(i.status)).length})</option><option value="paid">Paid ({invoices.filter((i) => i.status === "paid").length})</option><option value="overdue">Overdue ({overdueCount})</option><option value="cancelled">Cancelled ({invoices.filter((i) => i.status === "cancelled").length})</option></select>
 				</div>
 			</div>
 
@@ -325,7 +354,7 @@ export const InvoicesPage: React.FC = () => {
 					<div className="p-12 text-center text-gray-500">
 						Loading invoices...
 					</div>
-				) : invoices.length === 0 ? (
+				) : filteredInvoices.length === 0 ? (
 					<div className="p-12 text-center text-gray-500">
 						No invoices found matching criteria.
 					</div>
@@ -361,7 +390,7 @@ export const InvoicesPage: React.FC = () => {
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-gray-200">
-								{invoices.map((inv) => (
+								{filteredInvoices.map((inv) => (
 									<tr
 										key={inv.id}
 										className="hover:bg-gray-50 transition"
@@ -373,9 +402,10 @@ export const InvoicesPage: React.FC = () => {
 											<div className="font-medium text-gray-900">
 												{inv.customerName}
 											</div>
-											<div className="text-xs text-gray-400">
-												{inv.customerEmail}
-											</div>
+													<div className="text-xs text-gray-400">
+														{inv.customerEmail}
+													</div>
+													{inv.billingPeriodStart && <div className="mt-0.5 text-[11px] text-stone-500">Service period {formatDate(inv.billingPeriodStart)} – {formatDate(inv.billingPeriodEnd || inv.billingPeriodStart)}</div>}
 										</td>
 										<td className="px-6 py-4 text-gray-500">
 											{formatDate(inv.issueDate)}
@@ -410,8 +440,10 @@ export const InvoicesPage: React.FC = () => {
 											>
 												<Eye className="w-4 h-4" />
 											</button>
-											{inv.balanceDuePaise > 0 &&
-												inv.status !== "void" && (
+											{inv.status === "draft" && (role === "admin" || role === "staff") && <button title="Confirm and issue invoice" onClick={() => void handleConfirmInvoice(inv)} className="inline-flex items-center gap-1 rounded-lg bg-[#e9eee5] px-2 py-1 text-xs font-semibold text-[#344a35]"><Send size={13}/> Issue</button>}
+											{["draft", "confirmed", "overdue"].includes(inv.status) && (role === "admin" || role === "staff") && <button title="Cancel invoice" onClick={() => void handleCancelInvoice(inv)} className="rounded-lg p-1.5 text-stone-500 hover:bg-rose-50 hover:text-rose-700"><Ban size={14}/></button>}
+														{inv.balanceDuePaise > 0 &&
+															["confirmed", "sent", "partially_paid", "overdue"].includes(inv.status) && (
 													<button
 														onClick={() =>
 															handleOpenRecordPayment(
@@ -419,9 +451,10 @@ export const InvoicesPage: React.FC = () => {
 															)
 														}
 														className="inline-flex items-center px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg text-xs font-semibold transition border border-emerald-200"
+										title="Record a customer payment"
 													>
 														<DollarSign className="w-3.5 h-3.5 mr-0.5" />
-														Pay
+															Record
 													</button>
 												)}
 										</td>
@@ -477,6 +510,7 @@ export const InvoicesPage: React.FC = () => {
 								<div className="text-xs text-gray-500">
 									{selectedInvoice.customerEmail}
 								</div>
+													{selectedInvoice.customer?.billingAddress && <div className="mt-1 text-xs text-gray-500">{selectedInvoice.customer.billingAddress}{selectedInvoice.customer.billingStateCode ? ` · ${selectedInvoice.customer.billingStateCode}` : ""}</div>}
 							</div>
 							<div className="text-right">
 								<div className="text-xs uppercase text-gray-400 font-semibold mb-1">
@@ -554,7 +588,7 @@ export const InvoicesPage: React.FC = () => {
 									</span>
 								</div>
 								<div className="flex justify-between text-gray-600">
-									<span>GST (18%):</span>
+									<span>Taxes (rules applied):</span>
 									<span>
 										{formatCurrency(
 											selectedInvoice.taxPaise,
@@ -636,7 +670,7 @@ export const InvoicesPage: React.FC = () => {
 					<div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
 						<div className="flex justify-between items-center border-b border-gray-100 pb-3">
 							<h3 className="text-lg font-bold text-gray-900">
-								Record Payment
+								Record Customer Payment
 							</h3>
 							<button
 								onClick={() => setIsPaymentModalOpen(false)}
@@ -730,6 +764,14 @@ export const InvoicesPage: React.FC = () => {
 								</select>
 							</div>
 
+							{paymentMethod === "upi" && (
+								<div className="flex flex-col items-center justify-center p-3 bg-gray-50 rounded-xl border border-dashed border-gray-300 text-center">
+									<p className="text-xs text-gray-500 mb-2 font-medium">Share this QR with the customer to pay via UPI</p>
+									<img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=billing@brightloop.io&pn=Brightloop+Billing&am=${paymentAmountRupees || '0'}&cu=INR&tn=${paymentInvoice.invoiceNumber}`)}`} alt="UPI QR Code" className="w-32 h-32 border p-1 bg-white rounded-lg shadow-sm" />
+									<span className="text-[11px] font-mono text-gray-600 mt-1">billing@brightloop.io</span>
+								</div>
+							)}
+
 							<div>
 								<label className="block text-xs font-medium text-gray-700 mb-1">
 									Transaction Ref / UTR #
@@ -760,7 +802,7 @@ export const InvoicesPage: React.FC = () => {
 								>
 									{paymentSubmitting
 										? "Recording..."
-										: "Confirm Payment"}
+										: "Record payment received"}
 								</button>
 							</div>
 						</form>

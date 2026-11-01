@@ -4,6 +4,7 @@ import {
 	getAuth,
 	signInWithEmailAndPassword,
 	createUserWithEmailAndPassword,
+	sendEmailVerification,
 	signOut,
 	onAuthStateChanged,
 } from "firebase/auth";
@@ -29,6 +30,10 @@ export async function loginWithEmail(email: string, password: string): Promise<U
 export async function signUpWithEmail(email: string, password: string): Promise<User> {
 	const userCredential = await createUserWithEmailAndPassword(auth, email, password);
 	return userCredential.user;
+}
+
+export async function sendVerificationEmail(user: User): Promise<void> {
+	await sendEmailVerification(user);
 }
 
 export async function logoutUser(): Promise<void> {

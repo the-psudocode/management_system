@@ -23,7 +23,7 @@ export type InvoiceStatus =
 
 export type UserRole = "admin" | "staff" | "customer";
 
-export type BillingInterval = "daily" | "weekly" | "monthly" | "quarterly" | "yearly";
+export type BillingInterval = "daily" | "weekly" | "monthly" | "quarterly" | "half_yearly" | "yearly";
 
 export type DiscountType = "fixed" | "percentage";
 export type QuotationStatus = "draft" | "sent" | "accepted" | "declined" | "expired" | "converted";
@@ -47,6 +47,7 @@ export interface Customer {
 	city: string;
 	state: string;
 	pincode: string;
+	country?: string;
 	gstin: string;
 	createdAt: string;
 	updatedAt?: string;
@@ -61,6 +62,7 @@ export interface ProductVariant {
 	sku: string;
 	priceInPaise: number;
 	pricePaise?: number | string;
+	priceAdjustmentInPaise?: number | string;
 	billingCycle?: string;
 	isActive: boolean;
 }
@@ -75,6 +77,7 @@ export interface Product {
 	salesPricePaise?: number | string;
 	costPricePaise?: number | string;
 	variants: ProductVariant[];
+	plans?: SubscriptionPlan[];
 	status?: string;
 	isActive: boolean;
 	createdAt: string;
@@ -89,6 +92,8 @@ export interface SubscriptionPlan {
 	productId: string;
 	productName?: string;
 	productDescription?: string;
+	productType?: string;
+	productVariants?: ProductVariant[];
 	minimumQuantity?: number;
 	variantId?: string;
 	variantName?: string;
@@ -97,6 +102,7 @@ export interface SubscriptionPlan {
 	priceMonthlyPaise?: number;
 	priceYearlyPaise?: number;
 	billingInterval: BillingInterval;
+	intervalCount?: number;
 	trialDays?: number;
 	isActive: boolean;
 	status?: string;
@@ -120,6 +126,7 @@ export interface Subscription {
 	amountInPaise: number;
 	amountPaise?: number;
 	items?: any[];
+	invoices?: Invoice[];
 	createdAt: string;
 	updatedAt?: string;
 }

@@ -82,11 +82,11 @@ After configuring the backend environment variables and generating the Prisma cl
 npm run seed:demo
 ```
 
-The seed adds Brightloop Web Development, Cloud Hosting, Business Email, Cybersecurity Monitoring, Database Management, and Software Maintenance with sample INR plans. It is additive and idempotent: existing entries are skipped, never updated or deleted. It does not create fake subscriptions, invoices, or payments.
+The seed creates BrightLoop Software's service catalog: Cloud Hosting, Business Email, Cybersecurity Monitoring, Database Management, Website Development, Software Maintenance, and Cloud Storage. Each service has Starter, Professional, and Enterprise plans with service-appropriate billing intervals (weekly, monthly, quarterly, half-yearly, or yearly). Pricing is sample INR pricing and can be adjusted by an administrator. Legacy demo offers are archived rather than deleted so historical billing records remain intact.
 
-Customers can sign in, choose **Browse plans**, and request a plan. The request creates a draft subscription linked to the signed-in customer's own profile. Admin or staff must review and advance it through the existing lifecycle before invoices are generated. If the plans endpoint has no reachable catalog, the portal displays clearly labeled local preview data with purchasing disabled; this preview is not database data.
+Customers sign in, browse services first, open a service to compare its plans, then select a plan, quantity, and optional discount. Checkout creates a subscription and an invoice using configured tax and discount rules. The customer pays the invoice by UPI and submits a transaction reference. Staff or an administrator verifies the claim, then explicitly enables the subscription after the invoice is fully paid. Partial payments update the balance and invoice status. Customers can follow their invoices, payment claims, and subscriptions in the billing portal. Scheduled billing creates invoices for future subscription periods.
 
-Authentication uses Firebase email/password. Public sign-up creates customer accounts only; database roles control redirection and authorization. Existing admin/staff/demo customer access requires Firebase accounts provisioned in the configured Firebase project and corresponding active database records. The quick-fill buttons only fill email addresses and never provide passwords or bypass authentication.
+Authentication uses Firebase email/password. Customers can self-register. Staff accounts are created by an administrator and claimed by the invited staff member after email verification. Admin, staff, and customer permissions are enforced by the API; staff cannot manage staff access or billing rules. Demo users need Firebase accounts provisioned in the configured Firebase project and matching active database records. Demo sign-in controls are convenience shortcuts and do not bypass authentication.
 
 ### 4. Environment & Configuration
 

@@ -32,7 +32,7 @@ Use the current snake_case table names with Prisma `@@map`/`@map` mappings. Use 
 
 - **Product**: name, type, description/notes, sales price, cost price, currency, and active/archived state.
 - **ProductVariant**: product, name/brand/SKU and explicit price adjustment or replacement price. The brief's example (choosing a brand adds 560) suggests an adjustment, but that interpretation needs confirmation. Keep old variants when referenced by billing history.
-- **SubscriptionPlan**: product, optional default variant, name, interval unit (`DAY`, `WEEK`, `MONTH`, `YEAR`) and positive interval count, minimum quantity, base amount, availability dates, auto-close setting, currency, and active/archived state. This represents daily, weekly, monthly, and yearly billing; quarterly is `MONTH` with count `3`.
+- **SubscriptionPlan**: product, optional default variant, name, interval unit and positive interval count, minimum quantity, base amount, availability dates, auto-close setting, currency, and active/archived state. Billing supports daily, weekly, monthly, quarterly, half-yearly, and yearly periods; each product can offer its own subset of active plans.
 
 ### Quotations and subscriptions
 

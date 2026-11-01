@@ -10,6 +10,11 @@ export const customerRecordSelect = {
   companyName: true,
   phone: true,
   billingAddress: true,
+  billingCity: true,
+  billingStateCode: true,
+  postalCode: true,
+  billingCountry: true,
+  gstin: true,
   accountBalancePaise: true,
   creditLimitPaise: true,
   createdAt: true,
@@ -38,10 +43,11 @@ export function serializeCustomer(customer) {
     phone: customer.phone ?? '',
     company: customer.companyName ?? '',
     address: customer.billingAddress ?? '',
-    city: '',
-    state: '',
-    pincode: '',
-    gstin: '',
+    city: customer.billingCity ?? '',
+    state: customer.billingStateCode ?? '',
+    pincode: customer.postalCode ?? '',
+    country: customer.billingCountry ?? '',
+    gstin: customer.gstin ?? '',
     createdAt: customer.createdAt ?? '',
     status,
     accountBalancePaise: customer.accountBalancePaise ?? null,
@@ -49,7 +55,7 @@ export function serializeCustomer(customer) {
   };
 }
 
-export const unsupportedCustomerFields = ['city', 'state', 'pincode', 'gstin', 'billingCity', 'billingStateCode', 'postalCode'];
+export const unsupportedCustomerFields = [];
 
 export const MAX_BIGINT_PAISE = 9223372036854775807n;
 
@@ -64,6 +70,15 @@ const customerInput = z.object({
   phone: z.string().trim().max(40).optional(),
   billingAddress: z.string().trim().max(2000).optional(),
   address: z.string().trim().max(2000).optional(),
+  city: z.string().trim().max(100).optional(),
+  billingCity: z.string().trim().max(100).optional(),
+  state: z.string().trim().max(3).optional(),
+  billingStateCode: z.string().trim().max(3).optional(),
+  pincode: z.string().trim().max(20).optional(),
+  postalCode: z.string().trim().max(20).optional(),
+  country: z.string().trim().max(100).optional(),
+  billingCountry: z.string().trim().max(100).optional(),
+  gstin: z.string().trim().max(20).optional(),
   creditLimitPaise: money.optional(),
 }).strict();
 
@@ -77,11 +92,19 @@ export function parseCustomerInput(body, partial = false) {
   }
   if (body?.companyName !== undefined && body?.company !== undefined) throw ApiError.badRequest('Provide company or companyName, not both.');
   if (body?.billingAddress !== undefined && body?.address !== undefined) throw ApiError.badRequest('Provide address or billingAddress, not both.');
+  if (body?.city !== undefined && body?.billingCity !== undefined) throw ApiError.badRequest('Provide city or billingCity, not both.');
+  if (body?.state !== undefined && body?.billingStateCode !== undefined) throw ApiError.badRequest('Provide state or billingStateCode, not both.');
+  if (body?.pincode !== undefined && body?.postalCode !== undefined) throw ApiError.badRequest('Provide pincode or postalCode, not both.');
+  if (body?.country !== undefined && body?.billingCountry !== undefined) throw ApiError.badRequest('Provide country or billingCountry, not both.');
   const schema = partial ? customerInput.partial().omit({ userId: true }) : customerInput;
-  const { company, address, ...fields } = schema.parse(body);
+  const { company, address, city, state, pincode, country, ...fields } = schema.parse(body);
   return {
     ...fields,
     ...(company !== undefined ? { companyName: company } : {}),
     ...(address !== undefined ? { billingAddress: address } : {}),
+    ...(city !== undefined ? { billingCity: city } : {}),
+    ...(state !== undefined ? { billingStateCode: state.toUpperCase() } : {}),
+    ...(pincode !== undefined ? { postalCode: pincode } : {}),
+    ...(country !== undefined ? { billingCountry: country } : {}),
   };
 }

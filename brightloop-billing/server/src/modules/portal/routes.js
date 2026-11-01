@@ -4,7 +4,7 @@ import { requireRole } from '../../middleware/authorize.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/response.js';
 import { asyncHandler } from '../shared/handlers.js';
-import { customerSelect, serializeCustomer } from '../customers/customerDto.js';
+import { customerSelect, serializeCustomer, parseCustomerInput } from '../customers/customerDto.js';
 
 const router = Router();
 
@@ -28,7 +28,7 @@ export async function loadPortalOverview(db, userId) {
     db.invoice.findMany({
       where: { customerId: customer.id },
       select: {
-        id: true, number: true, status: true, currency: true, billingPeriodStart: true,
+        id: true, number: true, subscriptionId: true, status: true, currency: true, billingPeriodStart: true,
         billingPeriodEnd: true, dueDate: true, subtotalPaise: true, taxPaise: true,
         discountPaise: true, totalPaise: true, amountPaidPaise: true, createdAt: true,
       },
@@ -59,6 +59,17 @@ export async function loadPortalOverview(db, userId) {
 
 router.get('/portal', requireRole('customer'), asyncHandler(async (req, res) => {
   return sendSuccess(res, await loadPortalOverview(prisma, req.user.id));
+}));
+
+router.patch('/portal/profile', requireRole('customer'), asyncHandler(async (req, res) => {
+  const input = parseCustomerInput(req.body, true);
+  if (Object.keys(input).length === 0) throw ApiError.badRequest('Provide at least one profile field to update.');
+  const customer = await prisma.customer.update({
+    where: { userId: req.user.id },
+    data: input,
+    select: customerSelect,
+  });
+  return sendSuccess(res, serializeCustomer(customer), 'Your billing profile has been updated.');
 }));
 
 export default router;

@@ -13,11 +13,15 @@ const startServer = async () => {
     console.warn('[Database] Warning: Initial PostgreSQL connection check failed. The server will start in degraded state.');
   }
 
-  const server = app.listen(config.port, () => {
+  const server = app.listen(config.port, '0.0.0.0', () => {
     console.log(`[Server] Brightloop Billing Server running in ${config.env} mode on http://localhost:${config.port}`);
     console.log(`[Server] Health endpoint: http://localhost:${config.port}/api/health`);
     stopBillingScheduler = startBillingScheduler();
+    try { process.stdin.resume(); } catch {}
   });
+
+  // Keep event loop active indefinitely for Windows daemon
+  setInterval(() => {}, 60000);
 
   const handleShutdown = async (signal) => {
     console.log(`\n[Server] Received ${signal}. Shutting down gracefully...`);

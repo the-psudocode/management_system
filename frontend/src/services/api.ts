@@ -1,6 +1,6 @@
 // frontend/src/services/api.ts
 import axios from "axios";
-import { getCurrentUserToken, loginWithEmail, signUpWithEmail } from "./firebase";
+import { getCurrentUserToken, loginWithEmail, signUpWithEmail, sendVerificationEmail } from "./firebase";
 import type {
 	Customer,
 	Product,
@@ -96,6 +96,10 @@ export async function getPortalOverview(): Promise<PortalOverview> {
 	};
 }
 
+export async function updateMyBillingProfile(data: { company?: string; phone: string; address: string; city: string; state: string; pincode: string; country: string; gstin: string }): Promise<Customer> {
+	return apiClient.patch('/portal/profile', data);
+}
+
 function mapQuotation(q: any): Quotation {
 	return {
 		id: q.id,
@@ -139,6 +143,14 @@ export async function sendQuotation(id: string): Promise<Quotation> {
 
 export async function acceptQuotation(id: string): Promise<Quotation> {
 	return mapQuotation(await apiClient.post(`/quotations/${id}/accept`));
+}
+
+export async function rejectQuotation(id: string): Promise<Quotation> {
+	return mapQuotation(await apiClient.post(`/quotations/${id}/reject`));
+}
+
+export async function convertQuotation(id: string): Promise<any> {
+	return apiClient.post(`/quotations/${id}/convert`, {});
 }
 
 export async function getCustomers(
@@ -242,12 +254,16 @@ export async function getProducts(
 		name: p.name,
 		description: p.description || "",
 		category: p.type || "SaaS",
+		type: p.type || "SaaS",
 		basePriceInPaise: Number(p.salesPricePaise || 0),
+		salesPricePaise: Number(p.salesPricePaise || 0),
+		costPricePaise: p.costPricePaise === undefined ? undefined : Number(p.costPricePaise || 0),
 		variants: (p.variants || []).map((v: any) => ({
 			id: v.id,
 			name: v.name,
 			sku: v.sku,
 			priceInPaise: Number(v.pricePaise || 0),
+			priceAdjustmentInPaise: Number(v.pricePaise || 0),
 			isActive: true,
 		})),
 		isActive: p.status === "active",
@@ -270,12 +286,21 @@ export async function createProduct(data: any): Promise<Product> {
 		type: data.category || "service",
 		description: data.description || "",
 		salesPricePaise: String(data.basePriceInPaise || 0),
-		costPricePaise: "0",
+		costPricePaise: String(data.costPriceInPaise || 0),
 		variants: (data.variants || []).map((v: any) => ({
 			sku: v.sku || `SKU-${Date.now()}`,
 			name: v.name,
-			pricePaise: String(v.priceInPaise || 0),
+			pricePaise: String(v.priceAdjustmentInPaise ?? v.priceInPaise ?? 0),
 			currency: "INR",
+		})),
+		plans: (data.plans || []).map((plan: any) => ({
+			name: plan.name,
+			billingInterval: plan.billingInterval,
+			intervalCount: Number(plan.intervalCount || 1),
+			amountPaise: String(plan.amountPaise),
+			currency: "INR",
+			description: plan.description || "",
+			minimumQuantity: Number(plan.minimumQuantity || 1),
 		})),
 	};
 	const res: any = await apiClient.post("/products", payload);
@@ -288,6 +313,7 @@ export async function updateProduct(id: string, data: any): Promise<Product> {
 	if (data.category) payload.type = data.category;
 	if (data.description !== undefined) payload.description = data.description;
 	if (data.basePriceInPaise !== undefined) payload.salesPricePaise = String(data.basePriceInPaise);
+	if (data.costPriceInPaise !== undefined) payload.costPricePaise = String(data.costPriceInPaise);
 	const res: any = await apiClient.patch(`/products/${id}`, payload);
 	return res;
 }
@@ -305,9 +331,19 @@ export async function getPlans(page = 1, pageSize = 50): Promise<SubscriptionPla
 		productId: pl.productId,
 		productName: pl.product?.name || "Product",
 		productDescription: pl.product?.description || "",
+		productType: pl.product?.type || "",
+		productVariants: (pl.product?.variants || []).map((variant: any) => ({
+			id: variant.id,
+			name: variant.name,
+			sku: variant.sku,
+			priceInPaise: Number(variant.pricePaise || 0),
+			priceAdjustmentInPaise: Number(variant.pricePaise || 0),
+			isActive: true,
+		})),
 		priceInPaise: Number(pl.amountPaise || 0),
 		amountPaise: Number(pl.amountPaise || 0),
 		billingInterval: pl.billingInterval || "monthly",
+		intervalCount: Number(pl.intervalCount || 1),
 		minimumQuantity: Number(pl.minimumQuantity || 1),
 		trialDays: 0,
 		isActive: pl.status === "active",
@@ -320,13 +356,28 @@ export async function createPlan(data: any): Promise<SubscriptionPlan> {
 		productId: data.productId,
 		name: data.name,
 		billingInterval: data.billingInterval || "monthly",
-		intervalCount: 1,
+		intervalCount: Number(data.intervalCount || 1),
 		amountPaise: String(data.priceInPaise || data.amountPaise || 0),
 		currency: "INR",
 		description: data.description || "",
 	};
 	const res: any = await apiClient.post("/plans", payload);
 	return res;
+}
+
+export async function updatePlan(id: string, data: any): Promise<SubscriptionPlan> {
+	const payload = {
+		name: data.name,
+		billingInterval: data.billingInterval,
+		intervalCount: Number(data.intervalCount || 1),
+		amountPaise: String(data.priceInPaise ?? data.amountPaise ?? 0),
+		description: data.description || "",
+	};
+	return apiClient.patch(`/plans/${id}`, payload);
+}
+
+export async function archivePlan(id: string): Promise<void> {
+	await apiClient.post(`/plans/${id}/archive`);
 }
 
 // ============================================================
@@ -352,6 +403,7 @@ function mapSubscription(s: any): Subscription {
 		amountInPaise: Number(firstItem?.unitPricePaise || s.amountPaise || 0),
 		amountPaise: Number(firstItem?.unitPricePaise || s.amountPaise || 0),
 		items: s.items || [],
+		invoices: s.invoices || [],
 		createdAt: s.createdAt,
 		updatedAt: s.updatedAt,
 	};
@@ -376,14 +428,16 @@ export async function getSubscriptions(
 	};
 }
 
-export async function createSubscription(data: { customerId?: string; planId: string; quantity?: number; startDate?: string }): Promise<Subscription> {
+export async function createSubscription(data: { customerId?: string; planId: string; variantId?: string; quantity?: number; startDate?: string; discountCode?: string }): Promise<Subscription> {
 	const payload = {
 		...(data.customerId ? { customerId: data.customerId } : {}),
 		paymentTerms: "Net 30",
 		startDate: data.startDate || new Date().toISOString().split("T")[0],
+		...(data.discountCode ? { discountCode: data.discountCode } : {}),
 		items: [
 			{
 				planId: data.planId,
+				...(data.variantId ? { variantId: data.variantId } : {}),
 				quantity: data.quantity || 1,
 			},
 		],
@@ -468,12 +522,19 @@ export async function getInvoices(
 	customerId?: string,
 	_search?: string,
 ): Promise<Invoice[]> {
-	const params: Record<string, any> = { pageSize: 100 };
+	const params: Record<string, any> = { pageSize: 100, page: 1 };
 	if (statusFilter && statusFilter !== "all") params.status = statusFilter;
 	if (customerId) params.customerId = customerId;
-	const res: any = await apiClient.get("/invoices", { params });
-	const list = res.data || [];
-	return list.map(mapInvoice);
+	const all: any[] = [];
+	while (true) {
+		const res: any = await apiClient.get("/invoices", { params });
+		const list = res.data || [];
+		all.push(...list);
+		if (!res.totalPages || params.page >= res.totalPages || list.length === 0) break;
+		params.page += 1;
+	}
+	const query = _search?.trim().toLowerCase();
+	return all.map(mapInvoice).filter((invoice) => !query || `${invoice.invoiceNumber} ${invoice.customerName} ${invoice.customerEmail || ""}`.toLowerCase().includes(query));
 }
 
 export async function getInvoice(id: string): Promise<Invoice> {
@@ -481,8 +542,21 @@ export async function getInvoice(id: string): Promise<Invoice> {
 	return mapInvoice(res);
 }
 
+export async function previewBilling(billingDate: string): Promise<any> {
+	return apiClient.post("/billing/preview", { billingDate });
+}
+
+export async function runBilling(billingDate: string): Promise<any> {
+	return apiClient.post("/billing/run", { billingDate });
+}
+
 export async function confirmInvoice(id: string): Promise<Invoice> {
 	const res: any = await apiClient.post(`/invoices/${id}/confirm`);
+	return mapInvoice(res);
+}
+
+export async function cancelInvoice(id: string): Promise<Invoice> {
+	const res: any = await apiClient.post(`/invoices/${id}/cancel`);
 	return mapInvoice(res);
 }
 
@@ -649,33 +723,176 @@ export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
 }
 
 // ============================================================
+// Payment Claims & UPI QR
+// ============================================================
+
+export async function submitPaymentClaim(data: {
+	invoiceId: string;
+	utrNumber: string;
+	amountRupees: number;
+	notes?: string;
+}) {
+	return apiClient.post("/payment-claims", data);
+}
+
+export async function getPaymentClaims(): Promise<any[]> {
+	return apiClient.get("/payment-claims") as unknown as Promise<any[]>;
+}
+
+export async function verifyPaymentClaim(claimId: string) {
+	return apiClient.post(`/payment-claims/${claimId}/verify`);
+}
+
+export async function activateSubscriptionFromPaymentClaim(claimId: string) {
+	return apiClient.post(`/payment-claims/${claimId}/activate-subscription`);
+}
+
+export async function getStaffMembers() {
+	return apiClient.get("/staff");
+}
+
+export async function changeAccountRole(id: string, role: "customer" | "staff") {
+	return apiClient.patch(`/accounts/${id}/role`, { role });
+}
+
+export async function inviteStaffMember(data: { name: string; email: string }) {
+	return apiClient.post("/staff", data);
+}
+
+export async function deactivateStaffMember(id: string) {
+	return apiClient.post(`/staff/${id}/deactivate`);
+}
+
+export async function getTaxRules() {
+	return apiClient.get("/tax-rules");
+}
+
+export async function createTaxRule(data: { name: string; type: "GST" | "CGST" | "SGST" | "IGST"; rateBps: number; scope?: string; stateCode?: string; validFrom?: string; validUntil?: string }) {
+	return apiClient.post("/tax-rules", data);
+}
+
+export async function deactivateTaxRule(id: string) {
+	return apiClient.post(`/tax-rules/${id}/deactivate`);
+}
+
+export async function getDiscountRules() {
+	return apiClient.get("/discounts");
+}
+
+export async function createDiscountRule(data: any) {
+	return apiClient.post("/discounts", data);
+}
+
+export async function deactivateDiscountRule(id: string) {
+	return apiClient.post(`/discounts/${id}/deactivate`);
+}
+
+// ============================================================
 // Authentication API
 // ============================================================
 
-export async function loginUser(email: string, password: string) {
+export async function loginUser(email: string, password?: string, expectedRole: "customer" | "staff" | "admin" = "customer") {
 	localStorage.removeItem("brightloop_token");
-	const credential = await loginWithEmail(email, password);
-	const profile = await getCurrentUserProfile();
-	localStorage.setItem("brightloop_user", JSON.stringify(profile));
-	return { user: profile, firebaseUser: credential };
+	localStorage.removeItem("brightloop_user");
+
+	let authenticated = false;
+	let sessionToken: string | null = null;
+	let userRecord: any = null;
+
+	// 1. Try Firebase Authentication first if available
+	try {
+		const user = await loginWithEmail(email, password || "");
+		if (user) {
+			const idToken = await user.getIdToken();
+			if (idToken) {
+				const profile: any = await apiClient.post(
+					"/auth/signup",
+					{ name: email.split("@")[0], role: expectedRole },
+					{ headers: { Authorization: `Bearer ${idToken}` } }
+				);
+				sessionToken = profile?.token || idToken;
+				userRecord = profile?.user || profile;
+				authenticated = true;
+			}
+		}
+	} catch (fbErr: any) {
+		console.warn("Firebase sign-in failed or unavailable, falling back to native database login:", fbErr?.message);
+	}
+
+	// 2. If Firebase did not succeed, fall back seamlessly to native backend database login
+	if (!authenticated) {
+		const res: any = await apiClient.post("/auth/login", {
+			email: email.trim(),
+			password: password || "",
+			expectedRole,
+		});
+		sessionToken = res?.token;
+		userRecord = res?.user || res;
+	}
+
+	if (sessionToken) {
+		localStorage.setItem("brightloop_token", sessionToken);
+	}
+	if (userRecord) {
+		localStorage.setItem("brightloop_user", JSON.stringify(userRecord));
+	}
+	return { user: userRecord, token: sessionToken };
 }
 
 export async function signupUser(data: {
 	name: string;
 	email: string;
-	password: string;
+	password?: string;
+	role: "customer" | "staff";
 	companyName?: string;
 	phone?: string;
 }) {
 	localStorage.removeItem("brightloop_token");
-	await signUpWithEmail(data.email, data.password);
-	const profile: any = await apiClient.post("/auth/signup", {
-		name: data.name,
-		companyName: data.companyName,
-		phone: data.phone,
-	});
-	localStorage.setItem("brightloop_user", JSON.stringify(profile));
-	return { user: profile };
+	localStorage.removeItem("brightloop_user");
+	if (data.role === "staff") {
+		const invitation: any = await apiClient.post("/auth/staff-invites/check", { email: data.email });
+		if (!invitation?.invited) throw new Error("Staff accounts can only be created with an email invited by a BrightLoop administrator.");
+	}
+
+	let firebaseToken: string | null = null;
+	try {
+		const user = await signUpWithEmail(data.email, data.password || "");
+		if (user) {
+			if (data.role === "staff" && !user.emailVerified) {
+				await sendVerificationEmail(user);
+				return { pendingEmailVerification: true, email: data.email, user: { role: data.role } };
+			}
+			firebaseToken = await user.getIdToken();
+		}
+	} catch (fbErr: any) {
+		console.warn("Firebase signup failed or account exists, falling back to native database signup:", fbErr?.message);
+	}
+
+	const headers: Record<string, string> = {};
+	if (firebaseToken) {
+		headers.Authorization = `Bearer ${firebaseToken}`;
+	}
+
+	const profile: any = await apiClient.post(
+		"/auth/signup",
+		{
+			name: data.name,
+			email: data.email,
+			password: data.password,
+			role: data.role,
+			companyName: data.companyName,
+			phone: data.phone,
+		},
+		{ headers }
+	);
+
+	const token = profile?.token || firebaseToken;
+	if (token) {
+		localStorage.setItem("brightloop_token", token);
+	}
+	const userRecord = profile?.user || profile;
+	localStorage.setItem("brightloop_user", JSON.stringify(userRecord));
+	return { user: userRecord, token };
 }
 
 export function logout() {
@@ -704,20 +921,20 @@ export const apiService = {
 	},
 	getInvoices,
 	getInvoice,
+	createInvoice: async (_data: any): Promise<Invoice> => { throw new Error("Recurring invoices are generated from active subscription billing dates."); },
 	confirmInvoice,
+	cancelInvoice,
+	previewBilling,
+	runBilling,
 	sendInvoice: confirmInvoice,
 	recordPayment,
 	getPaymentsByInvoiceId,
-	createInvoice: async (_data: any): Promise<Invoice> => {
-		const today = new Date().toISOString().split("T")[0];
-		try {
-			await apiClient.post("/billing/run", { billingDate: today });
-		} catch (err) {
-			console.warn("Billing run note:", err);
-		}
-		const invs = await getInvoices();
-		return invs[0] || ({} as Invoice);
-	},
+	submitPaymentClaim,
+	getPaymentClaims,
+	getStaffMembers,
+	inviteStaffMember,
+	deactivateStaffMember,
+	verifyPaymentClaim,
 	getProducts,
 	createProduct,
 	updateProduct,

@@ -6,7 +6,7 @@ import { requireRole } from '../../middleware/authorize.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/response.js';
 import { asyncHandler, pagination, pageResult } from '../shared/handlers.js';
-import { calculateInvoice } from '../billing/calculations.js';
+import { addBillingInterval, calculateInvoice, invoiceDueDate } from '../billing/calculations.js';
 import { customerRecordSelect } from '../customers/customerDto.js';
 
 const router = Router();
@@ -154,13 +154,26 @@ router.post('/quotations/:id/accept', requireRole('admin', 'staff', 'customer'),
   return sendSuccess(res, updated, 'Quotation accepted.');
 }));
 
+router.post('/quotations/:id/reject', requireRole('customer'), asyncHandler(async (req, res) => {
+  const quotationId = id.parse(req.params.id);
+  const quotation = await prisma.quotation.findFirst({ where: { id: quotationId, customer: { userId: req.user.id } } });
+  if (!quotation) throw ApiError.notFound('Quotation not found.');
+  if (quotation.status !== 'sent') throw ApiError.conflict('Only a sent quotation can be rejected.');
+  const updated = await prisma.$transaction(async (tx) => {
+    const result = await tx.quotation.update({ where: { id: quotationId }, data: { status: 'declined' } });
+    await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'quotation.rejected_by_customer', entityType: 'quotation', entityId: quotationId, before: { status: quotation.status }, after: { status: 'declined' } } });
+    return result;
+  });
+  return sendSuccess(res, updated, 'Quotation declined.');
+}));
+
 router.post('/quotations/:id/convert', requireRole('admin', 'staff'), asyncHandler(async (req, res) => {
   const quotationId = id.parse(req.params.id);
   const input = z.object({ startDate: z.coerce.date().optional(), endDate: z.coerce.date().optional(), autoRenew: z.boolean().default(true) }).parse(req.body);
   if (input.endDate && input.startDate && input.endDate < input.startDate) throw ApiError.badRequest('endDate must be on or after startDate.');
 
   const subscription = await prisma.$transaction(async (tx) => {
-    const quotation = await tx.quotation.findUnique({ where: { id: quotationId }, include: { items: true } });
+    const quotation = await tx.quotation.findUnique({ where: { id: quotationId }, include: { items: { include: { taxes: true } } } });
     if (!quotation) throw ApiError.notFound('Quotation not found.');
     if (quotation.status !== 'accepted') throw ApiError.conflict('Accept the quotation before converting it to a subscription.');
     if (quotation.validUntil < new Date()) throw ApiError.conflict('This quotation has expired.');
@@ -200,10 +213,47 @@ router.post('/quotations/:id/convert', requireRole('admin', 'staff'), asyncHandl
       },
       include: { customer: { select: customerRecordSelect }, items: true },
     });
+
+    const periodStart = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()));
+    const nextBillingDate = addBillingInterval(periodStart, plans[0].billingInterval, plans[0].intervalCount, periodStart.getUTCDate());
+    const periodEnd = new Date(nextBillingDate);
+    periodEnd.setUTCDate(periodEnd.getUTCDate() - 1);
+    const billingPeriod = await tx.billingPeriod.create({ data: { subscriptionId: result.id, periodStart, periodEnd } });
+    const invoice = await tx.invoice.create({
+      data: {
+        number: `INV-${periodStart.getUTCFullYear()}-${result.number.split('-').at(-1)}-${periodStart.toISOString().slice(0, 10).replaceAll('-', '')}-R1`,
+        customerId: quotation.customerId,
+        subscriptionId: result.id,
+        billingPeriodId: billingPeriod.id,
+        revision: 1,
+        currency: quotation.currency,
+        billingPeriodStart: periodStart,
+        billingPeriodEnd: periodEnd,
+        issuedAt: new Date(),
+        dueDate: invoiceDueDate(periodStart, quotation.paymentTerms || 'Due on receipt'),
+        subtotalPaise: quotation.subtotalPaise,
+        taxPaise: quotation.taxPaise,
+        discountPaise: quotation.discountPaise,
+        totalPaise: quotation.totalPaise,
+        status: 'confirmed',
+        items: { create: quotation.items.map((item) => ({
+          productId: item.productId,
+          variantId: item.variantId,
+          description: item.description,
+          quantity: item.quantity,
+          unitPricePaise: item.unitPricePaise,
+          discountPaise: item.discountPaise,
+          taxPaise: item.taxPaise,
+          totalPaise: item.totalPaise,
+          taxes: { create: item.taxes.map(({ name, type, rateBps, taxablePaise, taxPaise }) => ({ name, type, rateBps, taxablePaise, taxPaise })) },
+        })) },
+      },
+    });
+    await tx.subscription.update({ where: { id: result.id }, data: { nextBillingDate } });
     await tx.quotation.update({ where: { id: quotation.id }, data: { status: 'converted' } });
-    await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'quotation.converted', entityType: 'quotation', entityId: quotation.id, after: { subscriptionId: result.id } } });
+    await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'quotation.converted', entityType: 'quotation', entityId: quotation.id, after: { subscriptionId: result.id, invoiceId: invoice.id } } });
     await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'subscription.created_from_quotation', entityType: 'subscription', entityId: result.id, after: { quotationId: quotation.id } } });
-    return result;
+    return tx.subscription.findUnique({ where: { id: result.id }, include: { customer: { select: customerRecordSelect }, items: true, invoices: true } });
   });
   return sendSuccess(res, subscription, 'Quotation converted to a confirmed subscription.', 201);
 }));

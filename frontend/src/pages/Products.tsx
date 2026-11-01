@@ -1,769 +1,135 @@
-import React, { useEffect, useState } from "react";
-import {
-	Package,
-	Search,
-	Plus,
-	Eye,
-	Edit2,
-	X,
-	Layers,
-	ChevronLeft,
-	ChevronRight,
-	Trash2,
-	CheckCircle,
-	XCircle,
-} from "lucide-react";
-import type { Product, ProductVariant } from "../types";
-import {
-	getProducts,
-	createProduct,
-	updateProduct,
-	toggleProductStatus,
-} from "../services/api";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Fragment } from "react";
+import { Check, ChevronDown, ChevronUp, CircleDollarSign, Layers3, Package, Plus, Search, Trash2 } from "lucide-react";
+import { createProduct, getCurrentUserProfile, getPlans, getProducts, toggleProductStatus, updateProduct } from "../services/api";
+import type { BillingInterval, Product, ProductVariant, SubscriptionPlan } from "../types";
 import { formatCurrency, formatDate } from "../utils/format";
 
-export const Products: React.FC = () => {
+type VariantDraft = { name: string; sku: string; adjustment: string };
+type PlanDraft = { name: string; interval: BillingInterval; price: string; description: string };
+type ProductDraft = { name: string; type: string; notes: string; salesPrice: string; costPrice: string };
+const intervalOptions: Array<{ value: BillingInterval; label: string }> = [
+	{ value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "monthly", label: "Monthly" },
+	{ value: "quarterly", label: "Quarterly" }, { value: "half_yearly", label: "Half-yearly" }, { value: "yearly", label: "Yearly" },
+];
+const inputClass = "w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#71866b] focus:ring-2 focus:ring-[#71866b]/15";
+const emptyProduct: ProductDraft = { name: "", type: "AI Agent", notes: "", salesPrice: "", costPrice: "" };
+
+function slug(value: string) { return value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60); }
+function groupPlanTiers(plans: SubscriptionPlan[]) {
+	const tiers = new Map<string, { name: string; description: string; prices: SubscriptionPlan[] }>();
+	for (const plan of plans) {
+		const tier = tiers.get(plan.name) || { name: plan.name, description: plan.description || "", prices: [] };
+		if (!tier.description && plan.description) tier.description = plan.description;
+		tier.prices.push(plan); tiers.set(plan.name, tier);
+	}
+	return [...tiers.values()];
+}
+
+export function Products() {
 	const [products, setProducts] = useState<Product[]>([]);
+	const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+	const [canManage, setCanManage] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [search, setSearch] = useState("");
-	const [categoryFilter, setCategoryFilter] = useState("all");
-	const [page, setPage] = useState(1);
-	const [totalPages, setTotalPages] = useState(1);
-	const [totalProducts, setTotalProducts] = useState(0);
+	const [error, setError] = useState("");
+	const [notice, setNotice] = useState("");
+	const [modalOpen, setModalOpen] = useState(false);
+	const [editing, setEditing] = useState<Product | null>(null);
+	const [saving, setSaving] = useState(false);
+	const [draft, setDraft] = useState<ProductDraft>(emptyProduct);
+	const [variants, setVariants] = useState<VariantDraft[]>([]);
+	const [planDrafts, setPlanDrafts] = useState<PlanDraft[]>([{ name: "Starter", interval: "monthly", price: "", description: "" }]);
+	const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
 
-	// Modals
-	const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-	const [editingProduct, setEditProduct] = useState<Product | null>(null);
-	const [viewingProduct, setViewProduct] = useState<Product | null>(null);
-
-	// Form State
-	const [formData, setFormData] = useState({
-		name: "",
-		description: "",
-		category: "SaaS",
-		basePriceInRupees: "",
-		isActive: true,
-	});
-
-	// Variants Form State
-	const [variants, setVariants] = useState<
-		{
-			name: string;
-			sku: string;
-			priceInRupees: string;
-			isActive: boolean;
-		}[]
-	>([{ name: "Standard", sku: "STD-01", priceInRupees: "", isActive: true }]);
-
-	const fetchProductList = async () => {
-		setLoading(true);
+	const load = useCallback(async () => {
+		setLoading(true); setError("");
 		try {
-			const res = await getProducts(page, 8, search, categoryFilter);
-			setProducts(res.data);
-			setTotalPages(res.totalPages);
-			setTotalProducts(res.total);
-		} catch (err) {
-			console.error("Failed to load products:", err);
-		} finally {
-			setLoading(false);
-		}
-	};
+			const [productResult, planResult, profile] = await Promise.all([getProducts(1, 100, search), getPlans(1, 100), getCurrentUserProfile()]);
+			setProducts(productResult.data);
+			setPlans(planResult);
+			setCanManage(profile.role === "admin");
+		} catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load products."); }
+		finally { setLoading(false); }
+	}, [search]);
+	useEffect(() => { void load(); }, [load]);
 
-	useEffect(() => {
-		fetchProductList();
-	}, [page, search, categoryFilter]);
+	const plansByProduct = useMemo(() => {
+		const map = new Map<string, SubscriptionPlan[]>();
+		for (const plan of plans) map.set(plan.productId, [...(map.get(plan.productId) || []), plan]);
+		return map;
+	}, [plans]);
 
-	const handleOpenAdd = () => {
-		setFormData({
-			name: "",
-			description: "",
-			category: "SaaS",
-			basePriceInRupees: "",
-			isActive: true,
-		});
-		setVariants([
-			{ name: "Standard", sku: "", priceInRupees: "", isActive: true },
-		]);
-		setIsAddModalOpen(true);
-	};
+	function openCreate() {
+		setEditing(null); setDraft(emptyProduct); setVariants([]);
+		setPlanDrafts([{ name: "Starter", interval: "monthly", price: "", description: "" }]);
+		setError(""); setModalOpen(true);
+	}
+	function openEdit(product: Product) {
+		setEditing(product);
+		setDraft({ name: product.name, type: product.type || product.category, notes: product.description || "", salesPrice: (Number(product.salesPricePaise ?? product.basePriceInPaise) / 100).toFixed(2), costPrice: (Number(product.costPricePaise ?? 0) / 100).toFixed(2) });
+		setError(""); setModalOpen(true);
+	}
+	function addVariant() { setVariants((current) => [...current, { name: "", sku: "", adjustment: "0" }]); }
+	function addPlan() { setPlanDrafts((current) => [...current, { name: "", interval: "monthly", price: "", description: "" }]); }
 
-	const handleOpenEdit = (p: Product) => {
-		setEditProduct(p);
-		setFormData({
-			name: p.name,
-			description: p.description,
-			category: p.category,
-			basePriceInRupees: (p.basePriceInPaise / 100).toString(),
-			isActive: p.isActive,
-		});
-		setVariants(
-			p.variants.map((v) => ({
-				name: v.name,
-				sku: v.sku,
-				priceInRupees: (v.priceInPaise / 100).toString(),
-				isActive: v.isActive,
-			})),
-		);
-	};
-
-	const handleAddVariantRow = () => {
-		setVariants([
-			...variants,
-			{ name: "", sku: "", priceInRupees: "", isActive: true },
-		]);
-	};
-
-	const handleRemoveVariantRow = (index: number) => {
-		if (variants.length === 1) return;
-		setVariants(variants.filter((_, i) => i !== index));
-	};
-
-	const handleVariantChange = (
-		index: number,
-		field: string,
-		value: string | boolean,
-	) => {
-		const updated = [...variants];
-		updated[index] = { ...updated[index], [field]: value };
-		setVariants(updated);
-	};
-
-	const handleToggleStatus = async (id: string) => {
+	async function submit(event: FormEvent) {
+		event.preventDefault(); setError(""); setNotice(""); setSaving(true);
 		try {
-			await toggleProductStatus(id);
-			fetchProductList();
-		} catch (err) {
-			console.error("Failed to toggle status:", err);
-		}
-	};
+			const productData = {
+				name: draft.name.trim(), category: draft.type.trim(), description: draft.notes.trim(),
+				basePriceInPaise: Math.round(Number(draft.salesPrice) * 100), costPriceInPaise: Math.round(Number(draft.costPrice) * 100),
+			};
+			if (editing) {
+				await updateProduct(editing.id, productData);
+				setNotice("Product details updated.");
+			} else {
+				if (planDrafts.length === 0 || planDrafts.some((plan) => !plan.name.trim() || !(Number(plan.price) > 0))) {
+					throw new Error("Add at least one named billing plan with a valid price.");
+				}
+				const created = await createProduct({
+					...productData,
+					variants: variants.filter((variant) => variant.name.trim()).map((variant) => ({
+						name: variant.name.trim(), sku: variant.sku.trim() || `${slug(draft.name)}-${slug(variant.name)}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+						priceAdjustmentInPaise: Math.round(Number(variant.adjustment || 0) * 100),
+					})),
+					plans: planDrafts.map((plan) => ({ name: plan.name.trim(), billingInterval: plan.interval, intervalCount: 1, amountPaise: Math.round(Number(plan.price) * 100), description: plan.description.trim() })),
+				});
+				setNotice(`${created.name} launched with ${planDrafts.length} billing ${planDrafts.length === 1 ? "plan" : "plans"}.`);
+			}
+			setModalOpen(false); setEditing(null); await load();
+		} catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save this product."); }
+		finally { setSaving(false); }
+	}
 
-	const handleSubmitAdd = async (e: React.FormEvent) => {
-		e.preventDefault();
-		try {
-			const basePriceInPaise = Math.round(
-				parseFloat(formData.basePriceInRupees || "0") * 100,
-			);
-			const parsedVariants: ProductVariant[] = variants.map((v, i) => ({
-				id: `var_${Date.now()}_${i}`,
-				name: v.name || "Default Variant",
-				sku: v.sku || `SKU-${i + 1}`,
-				priceInPaise: Math.round(
-					parseFloat(v.priceInRupees || "0") * 100,
-				),
-				isActive: v.isActive,
-			}));
+	async function archive(product: Product) {
+		if (!window.confirm(`Archive ${product.name}? Customers will no longer be able to start a subscription for it.`)) return;
+		setError(""); setNotice("");
+		try { await toggleProductStatus(product.id); setNotice(`${product.name} was archived.`); await load(); }
+		catch (cause) { setError(cause instanceof Error ? cause.message : "Could not archive product."); }
+	}
 
-			await createProduct({
-				name: formData.name,
-				description: formData.description,
-				category: formData.category,
-				status: formData.isActive ? "active" : "inactive",
-				basePriceInPaise: Math.round(
-					parseFloat(formData.basePriceInRupees || "0") * 100,
-				),
-				variants: (formData as any).variants || [],
-				isActive: formData.isActive,
-			});
-
-			setIsAddModalOpen(false);
-			fetchProductList();
-		} catch (err) {
-			console.error("Failed to create product:", err);
-		}
-	};
-
-	const handleSubmitEdit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		if (!editingProduct) return;
-		try {
-			const basePriceInPaise = Math.round(
-				parseFloat(formData.basePriceInRupees || "0") * 100,
-			);
-			const parsedVariants: ProductVariant[] = variants.map((v, i) => ({
-				id: editingProduct.variants[i]?.id || `var_${Date.now()}_${i}`,
-				name: v.name,
-				sku: v.sku,
-				priceInPaise: Math.round(
-					parseFloat(v.priceInRupees || "0") * 100,
-				),
-				isActive: v.isActive,
-			}));
-
-			await updateProduct(editingProduct.id, {
-				name: formData.name,
-				description: formData.description,
-				category: formData.category,
-				basePriceInPaise,
-				variants: parsedVariants,
-				isActive: formData.isActive,
-			});
-
-			setEditProduct(null);
-			fetchProductList();
-		} catch (err) {
-			console.error("Failed to update product:", err);
-		}
-	};
-
-	return (
-		<div className="p-6 max-w-7xl mx-auto space-y-6">
-			{/* Page Header */}
-			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-				<div>
-					<h1 className="text-2xl font-bold text-slate-900">
-						Product Management
-					</h1>
-					<p className="text-sm text-slate-500">
-						Configure software products, manage pricing tiers, and
-						maintain product variants.
-					</p>
-				</div>
-				<button
-					onClick={handleOpenAdd}
-					className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm px-4 py-2.5 rounded-lg shadow-sm transition cursor-pointer"
-				>
-					<Plus className="w-4 h-4" /> Create Product
-				</button>
-			</div>
-
-			{/* Filter & Search Bar */}
-			<div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
-				<div className="relative w-full md:w-96">
-					<Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-					<input
-						type="text"
-						placeholder="Search products by name or category..."
-						value={search}
-						onChange={(e) => {
-							setSearch(e.target.value);
-							setPage(1);
-						}}
-						className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
-					/>
-				</div>
-
-				<div className="flex items-center gap-3 w-full md:w-auto justify-end">
-					<span className="text-xs font-semibold text-slate-500 uppercase">
-						Category:
-					</span>
-					<select
-						value={categoryFilter}
-						onChange={(e) => {
-							setCategoryFilter(e.target.value);
-							setPage(1);
-						}}
-						className="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-					>
-						<option value="all">All Categories</option>
-						<option value="SaaS">SaaS</option>
-						<option value="Add-on">Add-on</option>
-						<option value="Services">Services</option>
-					</select>
-				</div>
-			</div>
-
-			{/* Products Directory Table */}
-			<div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-				{loading ? (
-					<div className="p-12 text-center text-slate-500">
-						<div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
-						<p className="text-sm">Loading product catalog...</p>
-					</div>
-				) : products.length === 0 ? (
-					<div className="p-12 text-center">
-						<Package className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-						<h3 className="text-base font-semibold text-slate-800">
-							No Products Found
-						</h3>
-						<p className="text-sm text-slate-500 mt-1">
-							Try adjusting your filter or create a new product
-							offering.
-						</p>
-					</div>
-				) : (
-					<div className="overflow-x-auto">
-						<table className="w-full text-left text-sm text-slate-600">
-							<thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200">
-								<tr>
-									<th className="py-3 px-4">Product Name</th>
-									<th className="py-3 px-4">Category</th>
-									<th className="py-3 px-4">Base Price</th>
-									<th className="py-3 px-4">Variants</th>
-									<th className="py-3 px-4">Status</th>
-									<th className="py-3 px-4">Created Date</th>
-									<th className="py-3 px-4 text-right">
-										Actions
-									</th>
-								</tr>
-							</thead>
-							<tbody className="divide-y divide-slate-200">
-								{products.map((p) => (
-									<tr
-										key={p.id}
-										className="hover:bg-slate-50/80 transition"
-									>
-										<td className="py-3.5 px-4">
-											<div className="font-semibold text-slate-900">
-												{p.name}
-											</div>
-											<div className="text-xs text-slate-400 line-clamp-1">
-												{p.description}
-											</div>
-										</td>
-										<td className="py-3.5 px-4">
-											<span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md text-xs font-semibold">
-												{p.category}
-											</span>
-										</td>
-										<td className="py-3.5 px-4 font-bold text-slate-900">
-											{formatCurrency(p.basePriceInPaise)}
-										</td>
-										<td className="py-3.5 px-4">
-											<span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-												<Layers className="w-3 h-3" />{" "}
-												{p.variants.length} Variants
-											</span>
-										</td>
-										<td className="py-3.5 px-4">
-											<button
-												onClick={() =>
-													handleToggleStatus(p.id)
-												}
-												className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase cursor-pointer transition ${
-													p.isActive
-														? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-														: "bg-rose-50 text-rose-700 border border-rose-200"
-												}`}
-											>
-												{p.isActive ? (
-													<>
-														<CheckCircle className="w-3 h-3" />{" "}
-														Active
-													</>
-												) : (
-													<>
-														<XCircle className="w-3 h-3" />{" "}
-														Inactive
-													</>
-												)}
-											</button>
-										</td>
-										<td className="py-3.5 px-4 text-slate-500">
-											{formatDate(p.createdAt)}
-										</td>
-										<td className="py-3.5 px-4 text-right">
-											<div className="inline-flex items-center gap-1">
-												<button
-													onClick={() =>
-														setViewProduct(p)
-													}
-													title="View Details & Variants"
-													className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition cursor-pointer"
-												>
-													<Eye className="w-4 h-4" />
-												</button>
-												<button
-													onClick={() =>
-														handleOpenEdit(p)
-													}
-													title="Edit Product"
-													className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition cursor-pointer"
-												>
-													<Edit2 className="w-4 h-4" />
-												</button>
-											</div>
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
-				)}
-
-				{/* Pagination Footer */}
-				{!loading && products.length > 0 && (
-					<div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-						<div>
-							Showing{" "}
-							<span className="font-semibold text-slate-700">
-								{products.length}
-							</span>{" "}
-							of{" "}
-							<span className="font-semibold text-slate-700">
-								{totalProducts}
-							</span>{" "}
-							products
-						</div>
-						<div className="flex items-center gap-2">
-							<button
-								disabled={page === 1}
-								onClick={() =>
-									setPage((p) => Math.max(1, p - 1))
-								}
-								className="p-1.5 border border-slate-300 rounded hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
-							>
-								<ChevronLeft className="w-4 h-4" />
-							</button>
-							<span className="font-medium text-slate-700">
-								Page {page} of {totalPages}
-							</span>
-							<button
-								disabled={page === totalPages}
-								onClick={() =>
-									setPage((p) => Math.min(totalPages, p + 1))
-								}
-								className="p-1.5 border border-slate-300 rounded hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
-							>
-								<ChevronRight className="w-4 h-4" />
-							</button>
-						</div>
-					</div>
-				)}
-			</div>
-
-			{/* ADD / EDIT PRODUCT MODAL */}
-			{(isAddModalOpen || editingProduct) && (
-				<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-					<div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col">
-						<div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-							<h2 className="text-lg font-bold text-slate-900">
-								{editingProduct
-									? "Edit Product"
-									: "Create New Product"}
-							</h2>
-							<button
-								onClick={() => {
-									setIsAddModalOpen(false);
-									setEditProduct(null);
-								}}
-								className="text-slate-400 hover:text-slate-600 transition cursor-pointer"
-							>
-								<X className="w-5 h-5" />
-							</button>
-						</div>
-
-						<form
-							onSubmit={
-								editingProduct
-									? handleSubmitEdit
-									: handleSubmitAdd
-							}
-							className="p-6 space-y-6 overflow-y-auto"
-						>
-							{/* Product Basic Info */}
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-								<div>
-									<label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
-										Product Name *
-									</label>
-									<input
-										required
-										type="text"
-										value={formData.name}
-										onChange={(e) =>
-											setFormData({
-												...formData,
-												name: e.target.value,
-											})
-										}
-										className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-										placeholder="e.g. Brightloop CRM"
-									/>
-								</div>
-
-								<div>
-									<label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
-										Category *
-									</label>
-									<select
-										value={formData.category}
-										onChange={(e) =>
-											setFormData({
-												...formData,
-												category: e.target.value,
-											})
-										}
-										className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-									>
-										<option value="SaaS">SaaS</option>
-										<option value="Add-on">Add-on</option>
-										<option value="Services">
-											Services
-										</option>
-									</select>
-								</div>
-
-								<div className="md:col-span-2">
-									<label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
-										Description
-									</label>
-									<textarea
-										rows={2}
-										value={formData.description}
-										onChange={(e) =>
-											setFormData({
-												...formData,
-												description: e.target.value,
-											})
-										}
-										className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-										placeholder="Brief description of product features..."
-									/>
-								</div>
-
-								<div>
-									<label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
-										Base Price (in ₹) *
-									</label>
-									<input
-										required
-										type="number"
-										step="0.01"
-										min="0"
-										value={formData.basePriceInRupees}
-										onChange={(e) =>
-											setFormData({
-												...formData,
-												basePriceInRupees:
-													e.target.value,
-											})
-										}
-										className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-										placeholder="2999"
-									/>
-								</div>
-
-								<div className="flex items-center gap-2 pt-6">
-									<input
-										type="checkbox"
-										id="isActiveCheck"
-										checked={formData.isActive}
-										onChange={(e) =>
-											setFormData({
-												...formData,
-												isActive: e.target.checked,
-											})
-										}
-										className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
-									/>
-									<label
-										htmlFor="isActiveCheck"
-										className="text-sm font-medium text-slate-700 cursor-pointer"
-									>
-										Product Active for Subscriptions
-									</label>
-								</div>
-							</div>
-
-							{/* Dynamic Product Variants Builder */}
-							<div className="border-t border-slate-200 pt-4">
-								<div className="flex items-center justify-between mb-3">
-									<div>
-										<h3 className="text-sm font-bold text-slate-900">
-											Product Variants & Pricing
-										</h3>
-										<p className="text-xs text-slate-500">
-											Define tiers (e.g. Starter, Pro,
-											Enterprise)
-										</p>
-									</div>
-									<button
-										type="button"
-										onClick={handleAddVariantRow}
-										className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
-									>
-										<Plus className="w-3.5 h-3.5" /> Add
-										Variant Tier
-									</button>
-								</div>
-
-								<div className="space-y-3">
-									{variants.map((v, idx) => (
-										<div
-											key={idx}
-											className="p-3 bg-slate-50 border border-slate-200 rounded-lg grid grid-cols-1 md:grid-cols-12 gap-2 items-center"
-										>
-											<div className="md:col-span-4">
-												<input
-													type="text"
-													required
-													placeholder="Variant Name (e.g. Pro)"
-													value={v.name}
-													onChange={(e) =>
-														handleVariantChange(
-															idx,
-															"name",
-															e.target.value,
-														)
-													}
-													className="w-full p-2 bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500"
-												/>
-											</div>
-											<div className="md:col-span-3">
-												<input
-													type="text"
-													required
-													placeholder="SKU Code"
-													value={v.sku}
-													onChange={(e) =>
-														handleVariantChange(
-															idx,
-															"sku",
-															e.target.value,
-														)
-													}
-													className="w-full p-2 bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500 uppercase"
-												/>
-											</div>
-											<div className="md:col-span-4">
-												<input
-													type="number"
-													step="0.01"
-													required
-													placeholder="Price (₹)"
-													value={v.priceInRupees}
-													onChange={(e) =>
-														handleVariantChange(
-															idx,
-															"priceInRupees",
-															e.target.value,
-														)
-													}
-													className="w-full p-2 bg-white border border-slate-200 rounded text-xs focus:ring-1 focus:ring-indigo-500"
-												/>
-											</div>
-											<div className="md:col-span-1 text-right">
-												<button
-													type="button"
-													disabled={
-														variants.length === 1
-													}
-													onClick={() =>
-														handleRemoveVariantRow(
-															idx,
-														)
-													}
-													className="p-1 text-slate-400 hover:text-rose-600 disabled:opacity-30 transition cursor-pointer"
-												>
-													<Trash2 className="w-4 h-4" />
-												</button>
-											</div>
-										</div>
-									))}
-								</div>
-							</div>
-
-							{/* Form Actions */}
-							<div className="pt-4 border-t border-slate-200 flex justify-end gap-3">
-								<button
-									type="button"
-									onClick={() => {
-										setIsAddModalOpen(false);
-										setEditProduct(null);
-									}}
-									className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-50 transition cursor-pointer"
-								>
-									Cancel
-								</button>
-								<button
-									type="submit"
-									className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition cursor-pointer"
-								>
-									{editingProduct
-										? "Save Product"
-										: "Create Product"}
-								</button>
-							</div>
-						</form>
-					</div>
-				</div>
-			)}
-
-			{/* DETAIL MODAL */}
-			{viewingProduct && (
-				<div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-					<div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
-						<div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-							<div className="flex items-center gap-3">
-								<div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
-									<Package className="w-5 h-5" />
-								</div>
-								<div>
-									<h2 className="text-lg font-bold text-slate-900">
-										{viewingProduct.name}
-									</h2>
-									<span className="text-xs font-semibold px-2 py-0.5 bg-slate-200 text-slate-700 rounded-full">
-										{viewingProduct.category}
-									</span>
-								</div>
-							</div>
-							<button
-								onClick={() => setViewProduct(null)}
-								className="text-slate-400 hover:text-slate-600 transition cursor-pointer"
-							>
-								<X className="w-5 h-5" />
-							</button>
-						</div>
-
-						<div className="p-6 space-y-6 overflow-y-auto">
-							<div>
-								<p className="text-xs font-semibold text-slate-500 uppercase">
-									Description
-								</p>
-								<p className="text-sm text-slate-700 mt-1">
-									{viewingProduct.description ||
-										"No description available."}
-								</p>
-							</div>
-
-							<div>
-								<h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-									<Layers className="w-4 h-4 text-indigo-600" />{" "}
-									Configured Product Variants
-								</h3>
-
-								<div className="space-y-2">
-									{viewingProduct.variants.map((v) => (
-										<div
-											key={v.id}
-											className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-xs"
-										>
-											<div>
-												<p className="font-bold text-slate-900">
-													{v.name}
-												</p>
-												<p className="text-slate-400 font-mono text-[11px]">
-													SKU: {v.sku}
-												</p>
-											</div>
-											<div className="text-right">
-												<p className="font-bold text-slate-900 text-sm">
-													{formatCurrency(
-														v.priceInPaise,
-													)}
-												</p>
-												<span
-													className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
-														v.isActive
-															? "bg-emerald-100 text-emerald-800"
-															: "bg-rose-100 text-rose-800"
-													}`}
-												>
-													{v.isActive
-														? "Active"
-														: "Disabled"}
-												</span>
-											</div>
-										</div>
-									))}
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
+	return <section className="mx-auto max-w-7xl space-y-5 p-1 md:p-2">
+		<header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.16em] text-[#60775c]">Catalog setup</p><h1 className="mt-1 text-2xl font-bold text-stone-900">Products</h1><p className="mt-1 text-sm text-stone-500">Launch a product with its cost, variants, and recurring billing plans.</p></div>{canManage && <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-[#263b2d] px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#344d39]"><Plus size={16}/>Launch product</button>}</header>
+		{error && !modalOpen && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}{notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+		<div className="flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"><label className="relative w-full sm:max-w-md"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search product name or type" className="w-full rounded-xl border border-stone-200 bg-stone-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-[#71866b] focus:bg-white"/></label><span className="text-xs text-stone-500">{products.length} products</span></div>
+		<div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+			{loading ? <p className="p-12 text-center text-sm text-stone-500">Loading product catalog…</p> : products.length === 0 ? <div className="p-12 text-center"><Package size={30} className="mx-auto text-stone-400"/><h2 className="mt-3 font-semibold text-stone-800">No products yet</h2><p className="mt-1 text-sm text-stone-500">Launch the first product and configure its billing options.</p></div> : <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-[#f7f8f4] text-xs font-bold uppercase tracking-wider text-stone-500"><tr><th className="px-5 py-3">Product</th><th className="px-5 py-3">Sales price</th>{canManage && <th className="px-5 py-3">Cost price</th>}<th className="px-5 py-3">Variants</th><th className="px-5 py-3">Plans</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Actions</th></tr></thead><tbody className="divide-y divide-stone-100">{products.map((product) => { const productPlans = plansByProduct.get(product.id) || []; const expanded = expandedProduct === product.id; return <Fragment key={product.id}><tr className="hover:bg-stone-50/70"><td className="px-5 py-4"><p className="font-semibold text-stone-900">{product.name}</p><p className="mt-0.5 text-xs text-stone-500">{product.type || product.category}</p></td><td className="px-5 py-4 font-semibold">{formatCurrency(Number(product.salesPricePaise ?? product.basePriceInPaise))}</td>{canManage && <td className="px-5 py-4 text-stone-700">{formatCurrency(Number(product.costPricePaise || 0))}</td>}<td className="px-5 py-4"><span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600">{product.variants.length} {product.variants.length === 1 ? "variant" : "variants"}</span></td><td className="px-5 py-4"><span className="rounded-full bg-[#edf1e9] px-2.5 py-1 text-xs font-semibold text-[#425b3f]">{productPlans.length} {productPlans.length === 1 ? "plan" : "plans"}</span></td><td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${product.isActive ? "bg-emerald-50 text-emerald-700" : "bg-stone-100 text-stone-500"}`}>{product.status || (product.isActive ? "active" : "archived")}</span></td><td className="px-5 py-4 text-right"><div className="inline-flex items-center gap-2"><button type="button" onClick={() => setExpandedProduct(expanded ? null : product.id)} aria-label={`${expanded ? "Hide" : "Show"} plans for ${product.name}`} className="rounded-lg p-2 text-stone-500 hover:bg-stone-100">{expanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}</button>{canManage && <><button type="button" onClick={() => openEdit(product)} className="rounded-lg border border-stone-200 px-2.5 py-1.5 text-xs font-semibold text-stone-600 hover:bg-stone-50">Edit</button><button type="button" onClick={() => void archive(product)} className="rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50">Archive</button></>}</div></td></tr>{expanded && <tr><td colSpan={canManage ? 7 : 6} className="bg-[#fafbf8] px-5 py-4"><div className="grid gap-5 lg:grid-cols-2"><div><h3 className="text-xs font-bold uppercase tracking-wider text-stone-500">Product notes</h3><p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">{product.description || "No notes added."}</p><h3 className="mt-4 text-xs font-bold uppercase tracking-wider text-stone-500">Variants & add-ons</h3>{product.variants.length ? <ul className="mt-2 space-y-2">{product.variants.map((variant: ProductVariant) => <li key={variant.id} className="flex justify-between gap-3 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm"><span>{variant.name} <small className="text-stone-400">{variant.sku}</small></span><span className="font-semibold">+{formatCurrency(Number(variant.priceAdjustmentInPaise ?? variant.priceInPaise))}</span></li>)}</ul> : <p className="mt-2 text-sm text-stone-500">No variants</p>}</div><div><h3 className="text-xs font-bold uppercase tracking-wider text-stone-500">Plan tiers & prices</h3>{productPlans.length ? <div className="mt-2 space-y-3">{groupPlanTiers(productPlans).map((tier) => <div key={tier.name} className="rounded-xl border border-stone-200 bg-white p-3"><p className="font-semibold text-stone-900">{tier.name}</p>{tier.description && <p className="mt-1 text-xs text-stone-500">{tier.description}</p>}<div className="mt-2 flex flex-wrap gap-2">{tier.prices.sort((a, b) => intervalOptions.findIndex((option) => option.value === a.billingInterval) - intervalOptions.findIndex((option) => option.value === b.billingInterval)).map((plan) => <span key={plan.id} className="rounded-lg bg-[#f4f6f1] px-2.5 py-1.5 text-xs text-stone-700"><span className="capitalize">{plan.billingInterval.replace("_", " ")}</span> <b className="text-[#344a35]">{formatCurrency(Number(plan.priceInPaise))}</b></span>)}</div></div>)}</div> : <p className="mt-2 text-sm text-stone-500">No active plans configured.</p>}</div></div></td></tr>}</Fragment>; })}</tbody></table></div>}
 		</div>
-	);
-};
+		{modalOpen && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/45 p-3 sm:p-5"><form onSubmit={(event) => void submit(event)} className="flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-[#fffefa] shadow-2xl"><div className="flex items-start justify-between border-b border-stone-200 px-5 py-4 sm:px-7"><div><p className="text-[10px] font-bold uppercase tracking-[.16em] text-[#60775c]">Product catalog</p><h2 className="mt-1 text-xl font-bold text-stone-900">{editing ? "Edit product details" : "Launch a product"}</h2><p className="mt-1 text-xs text-stone-500">Set up product economics and subscription options in one place.</p></div><button type="button" onClick={() => setModalOpen(false)} className="rounded-lg p-2 text-stone-500 hover:bg-stone-100" aria-label="Close"><span aria-hidden="true">×</span></button></div>
+			<div className="flex-1 space-y-6 overflow-y-auto p-5 sm:p-7">
+				<section><div className="mb-3 flex items-center gap-2"><Package size={17} className="text-[#526d4f]"/><h3 className="font-semibold text-stone-900">Product details</h3></div><div className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-semibold text-stone-600">Product name *<input required maxLength={200} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="e.g. BrightLoop AI Agent" className={inputClass}/></label><label className="text-xs font-semibold text-stone-600">Type *<input required maxLength={60} value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })} placeholder="AI Agent, SaaS, Service…" className={inputClass}/></label><label className="text-xs font-semibold text-stone-600">Base sales price (₹) *<input required min="0" step="0.01" type="number" value={draft.salesPrice} onChange={(event) => setDraft({ ...draft, salesPrice: event.target.value })} placeholder="e.g. 1200" className={inputClass}/></label><label className="text-xs font-semibold text-stone-600">Cost price (₹) *<input required min="0" step="0.01" type="number" value={draft.costPrice} onChange={(event) => setDraft({ ...draft, costPrice: event.target.value })} placeholder="e.g. 400" className={inputClass}/></label><label className="text-xs font-semibold text-stone-600 sm:col-span-2">Product notes<textarea rows={3} maxLength={4000} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Describe the product and what customers receive." className={inputClass}/></label></div></section>
+				{!editing && <>
+					<section className="border-t border-stone-200 pt-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><div className="flex items-center gap-2"><Layers3 size={17} className="text-[#526d4f]"/><h3 className="font-semibold text-stone-900">Variants and add-ons</h3></div><p className="mt-1 text-xs text-stone-500">Optional brand or feature choices; the amount is added to each plan price.</p></div><button type="button" onClick={addVariant} className="inline-flex items-center gap-1 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"><Plus size={14}/>Add variant</button></div>{variants.length === 0 ? <p className="rounded-xl border border-dashed border-stone-300 p-4 text-sm text-stone-500">No variants. Add a brand or feature when customers can choose an option.</p> : <div className="space-y-3">{variants.map((variant, index) => <div key={index} className="grid gap-3 rounded-xl border border-stone-200 bg-white p-3 sm:grid-cols-[1fr_1fr_180px_auto] sm:items-end"><label className="text-xs font-semibold text-stone-600">Variant name<input required value={variant.name} onChange={(event) => setVariants((current) => current.map((item, i) => i === index ? { ...item, name: event.target.value } : item))} placeholder="Odoo" className={inputClass}/></label><label className="text-xs font-semibold text-stone-600">SKU <span className="font-normal text-stone-400">(optional)</span><input value={variant.sku} onChange={(event) => setVariants((current) => current.map((item, i) => i === index ? { ...item, sku: event.target.value } : item))} placeholder="Auto-generated" className={inputClass}/></label><label className="text-xs font-semibold text-stone-600">Additional price (₹)<input required min="0" step="0.01" type="number" value={variant.adjustment} onChange={(event) => setVariants((current) => current.map((item, i) => i === index ? { ...item, adjustment: event.target.value } : item))} className={inputClass}/></label><button type="button" aria-label="Remove variant" onClick={() => setVariants((current) => current.filter((_, i) => i !== index))} className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-rose-50 hover:text-rose-700"><Trash2 size={16}/></button></div>)}</div>}</section>
+					<section className="border-t border-stone-200 pt-5"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><div className="flex items-center gap-2"><CircleDollarSign size={17} className="text-[#526d4f]"/><h3 className="font-semibold text-stone-900">Subscription plans *</h3></div><p className="mt-1 text-xs text-stone-500">Create plan tiers and billing intervals offered for this product.</p></div><button type="button" onClick={addPlan} className="inline-flex items-center gap-1 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"><Plus size={14}/>Add plan</button></div><div className="space-y-3">{planDrafts.map((plan, index) => <div key={index} className="grid gap-3 rounded-xl border border-stone-200 bg-white p-3 sm:grid-cols-[1.1fr_1fr_1fr_auto] sm:items-end"><label className="text-xs font-semibold text-stone-600">Plan name<input required value={plan.name} onChange={(event) => setPlanDrafts((current) => current.map((item, i) => i === index ? { ...item, name: event.target.value } : item))} placeholder="Starter, Pro…" className={inputClass}/></label><label className="text-xs font-semibold text-stone-600">Billing interval<select value={plan.interval} onChange={(event) => setPlanDrafts((current) => current.map((item, i) => i === index ? { ...item, interval: event.target.value as BillingInterval } : item))} className={inputClass}>{intervalOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="text-xs font-semibold text-stone-600">Recurring price (₹)<input required min="0.01" step="0.01" type="number" value={plan.price} onChange={(event) => setPlanDrafts((current) => current.map((item, i) => i === index ? { ...item, price: event.target.value } : item))} placeholder="e.g. 950" className={inputClass}/></label><button type="button" disabled={planDrafts.length === 1} aria-label="Remove plan" onClick={() => setPlanDrafts((current) => current.filter((_, i) => i !== index))} className="mb-1 rounded-lg p-2 text-stone-400 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-30"><Trash2 size={16}/></button><label className="text-xs font-semibold text-stone-600 sm:col-span-4">Plan description <span className="font-normal text-stone-400">(optional)</span><input value={plan.description} onChange={(event) => setPlanDrafts((current) => current.map((item, i) => i === index ? { ...item, description: event.target.value } : item))} placeholder="What's included in this plan?" className={inputClass}/></label></div>)}</div></section>
+				</>}
+				{editing && <p className="rounded-xl border border-[#dce5d8] bg-[#f4f7f1] p-4 text-xs leading-5 text-[#425b3f]">This editor updates product details and pricing. Manage this product’s billing plans in the grouped Plans workspace.</p>}
+				{error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+			</div>
+			<div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 bg-stone-50/70 px-5 py-4 sm:px-7"><p className="text-xs text-stone-500">{editing ? "Product economics are admin-only." : `${variants.length} variants · ${planDrafts.length} billing plans configured`}</p><div className="flex gap-2"><button type="button" onClick={() => setModalOpen(false)} className="rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50">Cancel</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-[#263b2d] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#344d39] disabled:opacity-60">{saving ? "Saving…" : <><Check size={15}/>{editing ? "Save product" : "Launch product"}</>}</button></div></div>
+		</form></div>}
+	</section>;
+}
 
 export const ProductsPage = Products;
+export default Products;

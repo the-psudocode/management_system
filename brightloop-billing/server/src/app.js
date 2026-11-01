@@ -15,6 +15,8 @@ import analyticsRoutes from './modules/analytics/routes.js';
 import quotationRoutes from './modules/quotations/routes.js';
 import portalRoutes from './modules/portal/routes.js';
 import authRoutes from './modules/auth/routes.js';
+import claimRoutes from './modules/payments/claims.js';
+import staffRoutes from './modules/staff/routes.js';
 
 export const createApp = () => {
   const app = express();
@@ -57,7 +59,7 @@ export const createApp = () => {
     email: req.user.email,
     role: req.user.role,
   }));
-  api.use(catalogRoutes, billingRoutes, paymentRoutes, ruleRoutes, analyticsRoutes, quotationRoutes, subscriptionRoutes, portalRoutes);
+  api.use(catalogRoutes, billingRoutes, paymentRoutes, claimRoutes, ruleRoutes, analyticsRoutes, quotationRoutes, subscriptionRoutes, portalRoutes, staffRoutes);
   app.use('/api/v1', api);
 
   // Root endpoint

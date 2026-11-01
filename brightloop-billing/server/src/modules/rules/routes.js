@@ -18,7 +18,7 @@ const taxInput = z.object({
   validUntil: z.coerce.date().optional(),
 });
 
-router.get('/tax-rules', requireRole('admin', 'staff'), asyncHandler(async (req, res) => {
+router.get('/tax-rules', requireRole('admin'), asyncHandler(async (req, res) => {
   const data = await prisma.taxRule.findMany({ orderBy: [{ isActive: 'desc' }, { name: 'asc' }] });
   return sendSuccess(res, data);
 }));
@@ -65,7 +65,7 @@ function validateDiscount(input) {
   if (!input.wholeSubscription && input.productIds.length === 0) throw ApiError.badRequest('Choose at least one eligible product or set wholeSubscription to true.');
 }
 
-router.get('/discounts', requireRole('admin', 'staff'), asyncHandler(async (req, res) => {
+router.get('/discounts', requireRole('admin'), asyncHandler(async (req, res) => {
   const data = await prisma.discount.findMany({
     include: { products: { include: { product: { select: { id: true, name: true, type: true, status: true } } } } },
     orderBy: [{ isActive: 'desc' }, { startsAt: 'desc' }],

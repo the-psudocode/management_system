@@ -35,7 +35,7 @@ export function startBillingScheduler() {
     timer = setTimeout(async () => {
       try {
         const result = await runBillingDate(businessDate(new Date()));
-        console.info(`[Billing] Scheduled run completed. Created ${result.createdCount} invoice(s); skipped ${result.skipped.length}.`);
+        console.info(`[Billing] Scheduled run completed. Created ${result.createdCount} invoice(s); skipped ${result.skipped.length}; failed ${result.failedCount}.`);
       } catch (error) {
         console.error('[Billing] Scheduled run failed:', error?.message || 'Unexpected error');
       } finally {

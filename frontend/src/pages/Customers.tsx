@@ -234,6 +234,7 @@ export const Customers: React.FC = () => {
 									<th className="py-3 px-4">
 										Customer / Email
 									</th>
+										<th className="py-3 px-4">Role</th>
 									<th className="py-3 px-4">Company</th>
 									<th className="py-3 px-4">Phone</th>
 									<th className="py-3 px-4">Location</th>
@@ -258,6 +259,7 @@ export const Customers: React.FC = () => {
 												{c.email}
 											</div>
 										</td>
+										<td className="py-3.5 px-4"><span className="inline-flex rounded-full bg-[#edf1e9] px-2.5 py-1 text-[10px] font-bold capitalize text-[#425b3f] ring-1 ring-inset ring-[#dce5d8]">Customer</span></td>
 										<td className="py-3.5 px-4 font-medium text-slate-700">
 											{c.company}
 										</td>

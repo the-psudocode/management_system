@@ -7,6 +7,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/response.js';
 import { asyncHandler, pagination, pageResult } from '../shared/handlers.js';
 import { customerRecordSelect } from '../customers/customerDto.js';
+import { addBillingInterval, calculateInvoice, invoiceDueDate } from '../billing/calculations.js';
 
 const router = Router();
 const id = z.string().min(1);
@@ -17,6 +18,7 @@ const createInput = z.object({
   startDate: date.optional(),
   endDate: date.optional(),
   autoRenew: z.boolean().default(true),
+  discountCode: z.string().trim().min(1).max(80).transform((value) => value.toUpperCase()).optional(),
   items: z.array(z.object({ planId: id, variantId: id.optional(), quantity: z.number().int().positive() })).min(1),
 });
 const subscriptionInclude = { customer: { select: customerRecordSelect }, items: { include: { product: { select: { id: true, name: true, type: true, description: true } }, plan: true, variant: true } } };
@@ -52,7 +54,7 @@ router.post('/subscriptions', requireRole('admin', 'staff', 'customer'), asyncHa
   if (!isCustomer && !input.customerId) throw ApiError.badRequest('customerId is required.');
   const customer = await prisma.customer.findUnique({
     where: isCustomer ? { userId: req.user.id } : { id: input.customerId },
-    select: { id: true },
+    select: { id: true, billingStateCode: true },
   });
   if (!customer) throw ApiError.notFound('Customer not found.');
 
@@ -62,6 +64,7 @@ router.post('/subscriptions', requireRole('admin', 'staff', 'customer'), asyncHa
     include: { product: true },
   });
   if (plans.length !== requestedPlanIds.length) throw ApiError.badRequest('One or more plans are missing or inactive.');
+  if (plans.some((plan) => plan.product.status !== 'active')) throw ApiError.badRequest('A selected service is no longer available.');
 
   const planById = new Map(plans.map((plan) => [plan.id, plan]));
   if (isCustomer) {
@@ -88,40 +91,148 @@ router.post('/subscriptions', requireRole('admin', 'staff', 'customer'), asyncHa
   }
 
   const cadence = plans[0];
+  const variantsById = new Map();
   for (const item of input.items) {
     if (!item.variantId) continue;
-    const variant = await prisma.productVariant.findFirst({ where: { id: item.variantId, productId: planById.get(item.planId).productId }, select: { id: true } });
+    const variant = await prisma.productVariant.findFirst({ where: { id: item.variantId, productId: planById.get(item.planId).productId }, select: { id: true, name: true, pricePaise: true } });
     if (!variant) throw ApiError.badRequest('Each variant must belong to the product on its subscription plan.');
+    variantsById.set(variant.id, variant);
   }
-  const subscription = await prisma.subscription.create({
-    data: {
-      number: `SUB-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`,
-      customerId: customer.id,
-      paymentTerms: input.paymentTerms,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      autoRenew: input.autoRenew,
-      autoClose: plans.some((plan) => plan.autoClose),
-      billingInterval: cadence.billingInterval,
-      intervalCount: cadence.intervalCount,
-      status: 'draft',
-      items: { create: input.items.map((item) => {
-        const plan = planById.get(item.planId);
-        return {
-          productId: plan.productId,
-          planId: plan.id,
-          variantId: item.variantId,
-          description: `${plan.product.name} - ${plan.name}`,
-          quantity: item.quantity,
-          unitPricePaise: plan.amountPaise,
-          startDate: input.startDate,
-          endDate: input.endDate,
-        };
-      }) },
-    },
-    include: { ...subscriptionInclude, invoices: { orderBy: { billingPeriodStart: 'desc' }, take: 12 } },
+  const unitPriceFor = (item) => planById.get(item.planId).amountPaise + (variantsById.get(item.variantId)?.pricePaise || 0n);
+  const descriptionFor = (item) => {
+    const plan = planById.get(item.planId);
+    const variant = variantsById.get(item.variantId);
+    return `${plan.product.name} - ${plan.name}${variant ? ` - ${variant.name}` : ''}`;
+  };
+  const now = new Date();
+  const startDate = input.startDate || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const status = isCustomer ? 'confirmed' : 'draft';
+
+  const subscription = await prisma.$transaction(async (tx) => {
+    let discounts = [];
+    if (input.discountCode) {
+      const discount = await tx.discount.findUnique({ where: { code: input.discountCode }, include: { products: true } });
+      if (!discount || !discount.isActive || discount.startsAt > startDate || discount.endsAt < startDate || (discount.maxUses != null && discount.usedCount >= discount.maxUses)) {
+        throw ApiError.badRequest('This discount code is invalid, inactive, expired, or has reached its usage limit.');
+      }
+      discounts = [discount];
+    }
+
+    const sub = await tx.subscription.create({
+      data: {
+        number: `SUB-${now.getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`,
+        customerId: customer.id,
+        paymentTerms: input.paymentTerms || 'Due on receipt',
+        startDate,
+        endDate: input.endDate,
+        autoRenew: input.autoRenew,
+        autoClose: plans.some((plan) => plan.autoClose),
+        billingInterval: cadence.billingInterval,
+        intervalCount: cadence.intervalCount,
+        status,
+        items: {
+          create: input.items.map((item) => {
+            const plan = planById.get(item.planId);
+            return {
+              productId: plan.productId,
+              planId: plan.id,
+              variantId: item.variantId,
+              description: descriptionFor(item),
+              quantity: item.quantity,
+              unitPricePaise: unitPriceFor(item),
+              startDate,
+              endDate: input.endDate,
+            };
+          }),
+        },
+        ...(discounts.length ? { discounts: { create: discounts.map((discount) => ({ discountId: discount.id })) } } : {}),
+      },
+      include: subscriptionInclude,
+    });
+
+    if (isCustomer) {
+      // Create initial billing period and invoice for customer purchase
+      const anchorDay = startDate.getUTCDate();
+      const nextBilling = addBillingInterval(startDate, cadence.billingInterval, cadence.intervalCount, anchorDay);
+      const periodEnd = new Date(nextBilling);
+      periodEnd.setUTCDate(periodEnd.getUTCDate() - 1);
+
+      const billingPeriod = await tx.billingPeriod.create({
+        data: {
+          subscriptionId: sub.id,
+          periodStart: startDate,
+          periodEnd,
+        },
+      });
+
+      const taxRules = await tx.taxRule.findMany({ where: { isActive: true } });
+      const calculation = calculateInvoice({
+        items: input.items.map((item) => {
+          const plan = planById.get(item.planId);
+          return { productId: plan.productId, variantId: item.variantId || null, planId: plan.id, description: descriptionFor(item), quantity: item.quantity, unitPricePaise: unitPriceFor(item) };
+        }),
+        discounts,
+        taxRules,
+        customerState: customer.billingStateCode || null,
+        originState: process.env.BUSINESS_STATE_CODE || null,
+        billingDate: startDate,
+      });
+      if (discounts.length && calculation.discountPaise === 0n) {
+        throw ApiError.badRequest('This discount code does not apply to the selected product, quantity, or purchase amount.');
+      }
+      for (const discount of discounts) {
+        const use = await tx.discount.updateMany({
+          where: {
+            id: discount.id,
+            isActive: true,
+            startsAt: { lte: startDate },
+            endsAt: { gte: startDate },
+            ...(discount.maxUses == null ? {} : { usedCount: { lt: discount.maxUses } }),
+          },
+          data: { usedCount: { increment: 1 } },
+        });
+        if (use.count !== 1) throw ApiError.conflict(`Discount ${discount.code} is no longer available.`);
+      }
+      const periodKey = startDate.toISOString().slice(0, 10).replaceAll('-', '');
+      const invoiceNumber = `INV-${startDate.getUTCFullYear()}-${sub.number.split('-').at(-1)}-${periodKey}-R1`;
+
+      await tx.invoice.create({
+        data: {
+          number: invoiceNumber,
+          customerId: customer.id,
+          subscriptionId: sub.id,
+          billingPeriodId: billingPeriod.id,
+          revision: 1,
+          currency: 'INR',
+          billingPeriodStart: startDate,
+          billingPeriodEnd: periodEnd,
+          issuedAt: new Date(),
+          dueDate: invoiceDueDate(startDate, input.paymentTerms || 'Due on receipt'),
+          subtotalPaise: calculation.subtotalPaise,
+          taxPaise: calculation.taxPaise,
+          discountPaise: calculation.discountPaise,
+          totalPaise: calculation.totalPaise,
+          status: 'confirmed',
+          items: {
+            create: calculation.items.map(({ taxes, planId: _planId, ...item }) => ({ ...item, taxes: { create: taxes } })),
+          },
+          discountRedemptions: { create: calculation.appliedDiscounts.map((discount) => ({ discountId: discount.discountId, amountPaise: discount.amountPaise })) },
+        },
+      });
+
+      await tx.subscription.update({
+        where: { id: sub.id },
+        data: { nextBillingDate: nextBilling },
+      });
+    }
+
+    return tx.subscription.findUnique({
+      where: { id: sub.id },
+      include: { ...subscriptionInclude, invoices: { orderBy: { billingPeriodStart: 'desc' }, take: 12 } },
+    });
   });
-  return sendSuccess(res, subscription, 'Subscription created in draft.', 201);
+
+  return sendSuccess(res, subscription, isCustomer ? 'Subscription order placed and invoice generated.' : 'Subscription created in draft.', 201);
 }));
 
 router.get('/subscriptions/:id', requireRole('admin', 'staff', 'customer'), asyncHandler(async (req, res) => {
@@ -169,20 +280,23 @@ router.patch('/subscriptions/:id/items', requireRole('admin', 'staff'), asyncHan
     if (plans.length !== planIds.length) throw ApiError.badRequest('One or more plans are missing or inactive.');
     if (new Set(plans.map((plan) => `${plan.billingInterval}:${plan.intervalCount}`)).size !== 1) throw ApiError.badRequest('All items in one subscription must share a billing cadence.');
     const planById = new Map(plans.map((plan) => [plan.id, plan]));
+    const variantsById = new Map();
     for (const item of input.items) {
       const plan = planById.get(item.planId);
       if (item.quantity < plan.minimumQuantity) throw ApiError.badRequest(`Plan ${plan.name} requires a minimum quantity of ${plan.minimumQuantity}.`);
       if (current.startDate && plan.availableFrom && current.startDate < plan.availableFrom) throw ApiError.badRequest(`Plan ${plan.name} is not available yet.`);
       if (current.startDate && plan.availableUntil && current.startDate > plan.availableUntil) throw ApiError.badRequest(`Plan ${plan.name} is no longer available.`);
       if (item.variantId) {
-        const variant = await tx.productVariant.findFirst({ where: { id: item.variantId, productId: plan.productId }, select: { id: true } });
+        const variant = await tx.productVariant.findFirst({ where: { id: item.variantId, productId: plan.productId }, select: { id: true, name: true, pricePaise: true } });
         if (!variant) throw ApiError.badRequest('Each variant must belong to the product on its subscription plan.');
+        variantsById.set(variant.id, variant);
       }
     }
     await tx.subscriptionItem.deleteMany({ where: { subscriptionId } });
     await tx.subscriptionItem.createMany({ data: input.items.map((item) => {
       const plan = planById.get(item.planId);
-      return { subscriptionId, productId: plan.productId, planId: plan.id, variantId: item.variantId, description: `${plan.product.name} - ${plan.name}`, quantity: item.quantity, unitPricePaise: plan.amountPaise, startDate: current.startDate, endDate: current.endDate };
+      const variant = variantsById.get(item.variantId);
+      return { subscriptionId, productId: plan.productId, planId: plan.id, variantId: item.variantId, description: `${plan.product.name} - ${plan.name}${variant ? ` - ${variant.name}` : ''}`, quantity: item.quantity, unitPricePaise: plan.amountPaise + (variant?.pricePaise || 0n), startDate: current.startDate, endDate: current.endDate };
     }) });
     await tx.subscription.update({ where: { id: subscriptionId }, data: { billingInterval: plans[0].billingInterval, intervalCount: plans[0].intervalCount, autoClose: plans.some((plan) => plan.autoClose) } });
     await tx.auditLog.create({ data: { actorUserId: req.user.id, action: 'subscription.items_updated', entityType: 'subscription', entityId: subscriptionId, after: { itemCount: input.items.length } } });
@@ -199,6 +313,16 @@ router.post('/subscriptions/:id/transition', requireRole('admin', 'staff'), asyn
     if (!current) throw ApiError.notFound('Subscription not found.');
     const from = current.status.toLowerCase();
     if (!transitions[from]?.includes(input.to)) throw ApiError.conflict(`Cannot transition a ${from} subscription to ${input.to}.`);
+
+    if (input.to === 'active') {
+      const fullyPaidInvoice = await tx.invoice.findFirst({
+        where: { subscriptionId, status: 'paid' },
+        select: { id: true, totalPaise: true, amountPaidPaise: true },
+      });
+      if (!fullyPaidInvoice || fullyPaidInvoice.amountPaidPaise < fullyPaidInvoice.totalPaise) {
+        throw ApiError.conflict('Verify full payment of the subscription invoice before enabling this plan.');
+      }
+    }
 
     const now = new Date();
     const data = { status: input.to };

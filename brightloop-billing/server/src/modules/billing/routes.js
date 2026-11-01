@@ -57,7 +57,7 @@ async function invoicePreview(tx, subscription, billingDate, originState) {
     items: subscription.items,
     discounts: linked,
     taxRules,
-    customerState: null,
+    customerState: subscription.customer?.billingStateCode || null,
     originState,
     billingDate,
   });
@@ -76,16 +76,22 @@ async function invoicePreview(tx, subscription, billingDate, originState) {
 
 export async function runBillingDate(billingDate, actorUserId = null) {
   const originState = process.env.BUSINESS_STATE_CODE || null;
-  const dueIds = await prisma.subscription.findMany({
-    where: { status: 'active', nextBillingDate: { lte: billingDate } },
-    select: { id: true },
-    orderBy: { nextBillingDate: 'asc' },
-    take: 500,
-  });
   const created = [];
   const skipped = [];
+  const failed = [];
+  const deferredIds = new Set();
 
-  for (const { id } of dueIds) {
+  // Process in bounded batches. Failed rows are remembered so a single bad
+  // subscription cannot stop billing for every other customer.
+  while (true) {
+    const dueIds = await prisma.subscription.findMany({
+      where: { status: 'active', nextBillingDate: { lte: billingDate }, ...(deferredIds.size ? { id: { notIn: [...deferredIds] } } : {}) },
+      select: { id: true },
+      orderBy: [{ nextBillingDate: 'asc' }, { id: 'asc' }],
+      take: 200,
+    });
+    if (!dueIds.length) break;
+    for (const { id } of dueIds) {
     try {
       const result = await prisma.$transaction(async (tx) => {
         const subscription = await tx.subscription.findUnique({ where: { id }, include: dueSubscriptionInclude });
@@ -134,7 +140,7 @@ export async function runBillingDate(billingDate, actorUserId = null) {
           items: subscription.items,
           discounts: claimed,
           taxRules,
-          customerState: null,
+          customerState: subscription.customer?.billingStateCode || null,
           originState,
           billingDate,
         });
@@ -181,7 +187,9 @@ export async function runBillingDate(billingDate, actorUserId = null) {
       else skipped.push({ subscriptionId: id, reason: result?.reason || 'No longer due.' });
     } catch (error) {
       if (error?.code === 'P2002') skipped.push({ subscriptionId: id, reason: 'Concurrent billing attempt won the unique billing-period claim.' });
-      else throw error;
+      else failed.push({ subscriptionId: id, reason: error?.message || 'Invoice generation failed.' });
+      deferredIds.add(id);
+    }
     }
   }
 
@@ -189,7 +197,7 @@ export async function runBillingDate(billingDate, actorUserId = null) {
     where: { status: { in: ['confirmed', 'partially_paid'] }, dueDate: { lt: billingDate } },
     data: { status: 'overdue' },
   });
-  return { billingDate, created, createdCount: created.length, skipped, overdueMarked: overdue.count };
+  return { billingDate, created, createdCount: created.length, skipped, failed, failedCount: failed.length, overdueMarked: overdue.count };
 }
 
 router.post('/billing/preview', requireRole('admin'), asyncHandler(async (req, res) => {
@@ -198,7 +206,6 @@ router.post('/billing/preview', requireRole('admin'), asyncHandler(async (req, r
     where: { status: 'active', nextBillingDate: { lte: billingDate } },
     include: dueSubscriptionInclude,
     orderBy: { nextBillingDate: 'asc' },
-    take: 500,
   });
   const originState = process.env.BUSINESS_STATE_CODE || null;
   const previews = [];
@@ -248,7 +255,7 @@ router.post('/invoices/:id/confirm', requireRole('admin', 'staff'), asyncHandler
   return sendSuccess(res, invoice, 'Invoice confirmed.');
 }));
 
-router.post('/invoices/:id/cancel', requireRole('admin'), asyncHandler(async (req, res) => {
+router.post('/invoices/:id/cancel', requireRole('admin', 'staff'), asyncHandler(async (req, res) => {
   const invoiceId = z.string().min(1).parse(req.params.id);
   const invoice = await prisma.$transaction(async (tx) => {
     const current = await tx.invoice.findUnique({ where: { id: invoiceId }, include: { allocations: true, discountRedemptions: true } });
